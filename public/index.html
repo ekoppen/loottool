@@ -4,204 +4,480 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sinterklaas Lootjes</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;900&display=swap');
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f5f7fa;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
             min-height: 100vh;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Static background */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(196, 30, 58, 0.4), transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(218, 165, 32, 0.3), transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(139, 69, 19, 0.4), transparent 50%);
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 32px 36px;
+            max-width: 520px;
+            max-height: calc(100vh - 40px);
+            width: 100%;
+            overflow-y: auto;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+            border: 1px solid rgba(218, 165, 32, 0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        h1 {
+            font-family: 'Playfair Display', serif;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 8px;
+            font-size: 2.2em;
+            font-weight: 900;
+            letter-spacing: 0.02em;
+            text-shadow: 0 0 30px rgba(218, 165, 32, 0.6), 0 0 60px rgba(218, 165, 32, 0.4);
+            filter: drop-shadow(0 0 20px rgba(218, 165, 32, 0.5));
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 40px;
+            font-size: 1em;
+            font-weight: 400;
+        }
+
+        .emoji {
+            font-size: 3.5em;
+            text-align: center;
+            margin: 0 0 24px 0;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1));
+        }
+
+        .sint-image {
+            width: 120px;
+            height: auto;
+            display: block;
+            margin: 0 auto 20px auto;
+            filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.2));
+        }
+
+        .kado-icon {
+            width: 80px;
+            height: auto;
+            display: block;
+            margin: 0 auto 16px auto;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        .input-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #374151;
+            font-weight: 500;
+            font-size: 0.9em;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 15px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: #fff;
+            font-family: inherit;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #c41e3a;
+            box-shadow: 0 0 0 4px rgba(196, 30, 58, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px 24px;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 14px rgba(196, 30, 58, 0.4);
+            position: relative;
+            overflow: hidden;
+            font-family: inherit;
+        }
+
+        button:hover {
+            box-shadow: 0 6px 20px rgba(196, 30, 58, 0.6);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            box-shadow: 0 4px 14px rgba(107, 114, 128, 0.4);
+            margin-top: 12px;
+        }
+
+        button.secondary:hover {
+            box-shadow: 0 6px 20px rgba(107, 114, 128, 0.6);
+        }
+
+        .result-box {
+            background: linear-gradient(135deg, rgba(196, 30, 58, 0.1) 0%, rgba(139, 69, 19, 0.1) 100%);
+            border: 2px solid rgba(196, 30, 58, 0.3);
+            border-radius: 16px;
+            padding: 40px 24px;
+            text-align: center;
+            margin: 24px 0;
+            backdrop-filter: blur(10px);
+        }
+
+        .result-name {
+            font-size: 2em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 12px 0;
+        }
+
+        .warning {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(245, 158, 11, 0.1) 100%);
+            border-left: 4px solid #f59e0b;
+            padding: 16px 20px;
+            margin: 16px 0;
+            border-radius: 12px;
+            color: #92400e;
+            font-size: 0.9em;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.1);
+        }
+
+        .info {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.1) 100%);
+            border-left: 4px solid #3b82f6;
+            padding: 16px 20px;
+            margin: 16px 0;
+            border-radius: 12px;
+            color: #1e40af;
+            font-size: 0.9em;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+        }
+
+        .error {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
+            border-left: 4px solid #ef4444;
+            padding: 16px 20px;
+            margin: 16px 0;
+            border-radius: 12px;
+            color: #991b1b;
+            font-size: 0.9em;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
+        }
+
+        .admin-link {
+            text-align: center;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .admin-link a {
+            color: #6b7280;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .admin-link a:hover {
+            color: #c41e3a;
+            gap: 6px;
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 10000;
+        }
+
+        .toast {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 16px;
+            padding: 18px 22px;
+            margin-bottom: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            min-width: 320px;
+            max-width: 400px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            border: 2px solid rgba(196, 30, 58, 0.3);
+        }
+
+        .toast.success {
+            border-color: rgba(16, 185, 129, 0.5);
+            background: rgba(240, 253, 244, 0.98);
+        }
+
+        .toast.error {
+            border-color: rgba(239, 68, 68, 0.5);
+            background: rgba(254, 242, 242, 0.98);
+        }
+
+        .toast.warning {
+            border-color: rgba(251, 191, 36, 0.5);
+            background: rgba(254, 252, 232, 0.98);
+        }
+
+        .toast.info {
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(239, 246, 255, 0.98);
+        }
+
+        .toast-icon {
+            font-size: 1.6em;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+        }
+
+        .toast-content {
+            flex: 1;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 4px;
+            font-size: 0.95em;
+        }
+
+        .toast-message {
+            font-size: 0.85em;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 9999;
+        }
+
+        .modal-overlay.active {
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 20px;
         }
-        
-        .container {
-            background: white;
-            border-radius: 12px;
-            padding: 40px;
+
+        .modal {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 24px;
+            padding: 40px 36px;
             max-width: 480px;
             width: 100%;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            border: 1px solid #e8ebed;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        
-        h1 {
-            color: #2c3e50;
+
+        .modal-header {
             text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .modal-icon {
+            font-size: 3.5em;
+            margin-bottom: 16px;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1));
+        }
+
+        .modal-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             margin-bottom: 8px;
-            font-size: 1.75em;
-            font-weight: 600;
         }
-        
-        .subtitle {
+
+        .modal-text {
+            color: #6b7280;
             text-align: center;
-            color: #6c757d;
-            margin-bottom: 32px;
+            margin-bottom: 28px;
+            line-height: 1.6;
             font-size: 1em;
-            font-weight: 400;
         }
-        
-        .emoji {
-            font-size: 2.5em;
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+        }
+
+        /* Participants List */
+        .participants-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 16px;
+            margin: 28px 0;
+        }
+
+        .participant-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid rgba(196, 30, 58, 0.2);
+            border-radius: 16px;
+            padding: 24px 16px;
             text-align: center;
-            margin: 16px 0 24px 0;
-        }
-        
-        .screen {
-            display: none;
-            animation: fadeIn 0.3s;
-        }
-        
-        .screen.active {
-            display: block;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .input-group {
-            margin-bottom: 24px;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #495057;
-            font-weight: 500;
-            font-size: 0.9em;
-        }
-        
-        input[type="text"] {
-            width: 100%;
-            padding: 12px 14px;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            font-size: 15px;
-            transition: all 0.2s;
-            background: #fff;
-        }
-        
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #4a90e2;
-            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-        }
-        
-        button {
-            width: 100%;
-            padding: 12px 20px;
-            background: #4a90e2;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 15px;
-            font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            position: relative;
+            overflow: hidden;
         }
-        
-        button:hover {
-            background: #357abd;
-            box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+
+        .participant-card:hover {
+            background: linear-gradient(135deg, rgba(196, 30, 58, 0.15) 0%, rgba(139, 69, 19, 0.15) 100%);
+            border-color: rgba(196, 30, 58, 0.5);
+            box-shadow: 0 12px 28px rgba(196, 30, 58, 0.25);
         }
-        
-        button:active {
-            transform: translateY(1px);
-        }
-        
-        button:disabled {
+
+        .participant-card.viewed {
             opacity: 0.6;
             cursor: not-allowed;
-            transform: none;
+            background: linear-gradient(135deg, rgba(107, 114, 128, 0.1) 0%, rgba(75, 85, 99, 0.1) 100%);
+            border-color: rgba(107, 114, 128, 0.2);
         }
-        
-        button.secondary {
-            background: #6c757d;
-            color: white;
-            margin-top: 8px;
+
+        .participant-card.viewed:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
-        
-        button.secondary:hover {
-            background: #5a6268;
-            box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+
+        .participant-icon {
+            font-size: 2.5em;
+            margin-bottom: 12px;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
         }
-        
-        .result-box {
-            background: #f8f9fa;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            padding: 32px 24px;
-            text-align: center;
-            margin: 24px 0;
-        }
-        
-        .result-name {
-            font-size: 1.75em;
+
+        .participant-name {
             font-weight: 600;
-            color: #2c3e50;
-            margin: 8px 0;
+            color: #1f2937;
+            font-size: 1em;
+            letter-spacing: -0.01em;
         }
-        
-        .warning {
-            background: #fff3cd;
-            border-left: 3px solid #ffc107;
-            padding: 12px 16px;
-            margin: 16px 0;
-            border-radius: 4px;
-            color: #856404;
-            font-size: 0.9em;
+
+        .participant-card.viewed .participant-name {
+            color: #9ca3af;
         }
-        
-        .info {
-            background: #e7f3ff;
-            border-left: 3px solid #4a90e2;
-            padding: 12px 16px;
-            margin: 16px 0;
-            border-radius: 4px;
-            color: #004085;
-            font-size: 0.9em;
-        }
-        
-        .error {
-            background: #f8d7da;
-            border-left: 3px solid #dc3545;
-            padding: 12px 16px;
-            margin: 16px 0;
-            border-radius: 4px;
-            color: #721c24;
-            font-size: 0.9em;
-        }
-        
-        .admin-link {
-            text-align: center;
-            margin-top: 24px;
-            padding-top: 24px;
-            border-top: 1px solid #e9ecef;
-        }
-        
-        .admin-link a {
-            color: #6c757d;
-            text-decoration: none;
-            font-size: 13px;
-        }
-        
-        .admin-link a:hover {
-            color: #495057;
-            text-decoration: underline;
+
+        .participant-viewed-badge {
+            font-size: 0.75em;
+            color: #10b981;
+            margin-top: 8px;
+            font-weight: 600;
+            background: rgba(16, 185, 129, 0.1);
+            padding: 4px 8px;
+            border-radius: 8px;
+            display: inline-block;
         }
     </style>
 </head>
 <body>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-icon">🎁</div>
+                <div class="modal-title" id="modalTitle">Bevestig je naam</div>
+            </div>
+            <div class="modal-text" id="modalText"></div>
+            <div class="modal-buttons">
+                <button class="secondary" onclick="closeModal()">Annuleren</button>
+                <button onclick="confirmDraw()">Ja, toon mijn lootje</button>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
-        <h1>🎅 Sinterklaas Lootjes</h1>
+        <img src="/sint.png" alt="Sinterklaas" class="sint-image">
+        <h1>Sinterklaas Lootjes</h1>
         <p class="subtitle">Wie mag jij verrassen?</p>
         
         <!-- Loading Screen -->
@@ -210,35 +486,38 @@
             <p style="text-align: center; color: #666;">Laden...</p>
         </div>
         
-        <!-- No Lottery Screen -->
+        <!-- No Lottery Screen / Welcome Screen -->
         <div id="noLotteryScreen" class="screen">
-            <div class="emoji">📭</div>
-            <div class="error">
-                Er is nog geen loting aangemaakt.
-            </div>
-            <p style="text-align: center; color: #666; margin: 20px 0;">
-                Neem contact op met de organisator om een loting aan te maken.
+            <img src="/kado.png" alt="Cadeau" class="kado-icon">
+            <h2 style="text-align: center; color: #374151; font-size: 1.5em; font-weight: 600; margin-bottom: 16px;">
+                Welkom bij Sinterklaas Lootjes!
+            </h2>
+            <p style="text-align: center; color: #6b7280; margin-bottom: 24px; line-height: 1.6;">
+                Organiseer je eigen digitale lootjestrekking voor familie, vrienden of collega's.
             </p>
-            <button onclick="checkStatus()">🔄 Opnieuw Controleren</button>
+            <div class="info" style="margin-bottom: 24px;">
+                ✨ Maak gratis een eigen loting aan en deel de unieke link met je groep!
+            </div>
+            <button onclick="window.location.href='/admin.html'" style="font-size: 16px; padding: 16px 32px;">
+                🎁 Begin hier - Maak een loting
+            </button>
+            <p style="text-align: center; color: #9ca3af; font-size: 0.85em; margin-top: 20px;">
+                Heb je al een link ontvangen? Vraag de organisator om de juiste URL.
+            </p>
         </div>
         
-        <!-- Name Entry Screen -->
-        <div id="nameEntryScreen" class="screen">
-            <div class="emoji">👤</div>
-            <div class="input-group">
-                <label for="nameInput">Wat is je naam?</label>
-                <input type="text" id="nameInput" placeholder="Jouw naam..." autocomplete="off">
-            </div>
-            <button onclick="drawLot()">Toon Mijn Lootje 🎁</button>
-            
-            <div class="info" style="margin-top: 20px;">
-                ℹ️ Voer je naam precies in zoals deze is geregistreerd
-            </div>
+        <!-- Participants List Screen -->
+        <div id="participantsScreen" class="screen">
+            <img src="/kado.png" alt="Cadeau" class="kado-icon">
+            <p style="text-align: center; color: #666; margin-bottom: 20px;">
+                Klik op je naam om je lootje te bekijken:
+            </p>
+            <div id="participantsList" class="participants-grid"></div>
         </div>
-        
+
         <!-- Result Screen -->
         <div id="resultScreen" class="screen">
-            <div class="emoji">🎁</div>
+            <img src="/kado.png" alt="Cadeau" class="kado-icon">
             <p style="text-align: center; margin-bottom: 10px;">
                 <strong id="giverName"></strong>, jij mag een surprise maken voor:
             </p>
@@ -259,23 +538,83 @@
 
     <script>
         let lotteryStatus = null;
-        
-        window.addEventListener('load', checkStatus);
-        
-        document.getElementById('nameInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') drawLot();
-        });
-        
+        let eventUrl = null;
+        let selectedName = null;
+        let socket = null;
+
+        window.addEventListener('load', init);
+
+        function init() {
+            // Get event URL from path (e.g., /event/abc123def)
+            const pathParts = window.location.pathname.split('/');
+            if (pathParts[1] === 'event' && pathParts[2]) {
+                eventUrl = pathParts[2];
+            }
+
+            // Initialize WebSocket connection
+            initializeSocket();
+
+            // Only check status if we have an event URL
+            // Otherwise show the welcome/no lottery screen
+            if (eventUrl) {
+                checkStatus();
+            } else {
+                showScreen('noLotteryScreen');
+            }
+        }
+
+        function initializeSocket() {
+            socket = io();
+
+            socket.on('connect', () => {
+                console.log('Connected to server');
+                if (eventUrl) {
+                    socket.emit('join-event', eventUrl);
+                }
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+            });
+
+            // Listen for participant-viewed events
+            socket.on('participant-viewed', (data) => {
+                console.log('Participant viewed:', data);
+
+                // Update local status
+                if (lotteryStatus) {
+                    lotteryStatus.viewedBy = data.viewedBy;
+                    lotteryStatus.viewedCount = data.viewedCount;
+
+                    // Refresh participant display
+                    displayParticipants(lotteryStatus.participants, lotteryStatus.viewedBy);
+
+                    // Show toast notification
+                    showToast('Update', `${data.name} heeft getrokken`, 'info');
+                }
+            });
+
+            // Listen for lottery-reset events
+            socket.on('lottery-reset', () => {
+                console.log('Lottery reset');
+                showToast('Loting verwijderd', 'De loting is verwijderd door de admin', 'warning');
+                setTimeout(() => {
+                    checkStatus();
+                }, 1000);
+            });
+        }
+
         async function checkStatus() {
             showScreen('loadingScreen');
-            
+
             try {
-                const response = await fetch('/api/status');
+                const url = eventUrl ? `/api/status?eventUrl=${eventUrl}` : '/api/status';
+                const response = await fetch(url);
                 lotteryStatus = await response.json();
-                
+
                 if (lotteryStatus.exists) {
-                    showScreen('nameEntryScreen');
-                    document.getElementById('nameInput').focus();
+                    displayParticipants(lotteryStatus.participants, lotteryStatus.viewedBy || []);
+                    showScreen('participantsScreen');
                 } else {
                     showScreen('noLotteryScreen');
                 }
@@ -284,48 +623,127 @@
                 showScreen('noLotteryScreen');
             }
         }
-        
-        async function drawLot() {
-            const nameInput = document.getElementById('nameInput');
-            const name = nameInput.value.trim();
-            
-            if (name === '') {
-                alert('Voer je naam in!');
-                return;
-            }
-            
+
+        function displayParticipants(participants, viewedBy) {
+            const list = document.getElementById('participantsList');
+            list.innerHTML = participants.map(name => {
+                const hasViewed = viewedBy.some(v => v.toLowerCase() === name.toLowerCase());
+                const viewedClass = hasViewed ? 'viewed' : '';
+                const viewedBadge = hasViewed ? '<div class="participant-viewed-badge">✓ Getrokken</div>' : '';
+                const onclick = hasViewed ? '' : `onclick="selectParticipant('${name.replace(/'/g, "\\'")}')"`;
+
+                return `
+                    <div class="participant-card ${viewedClass}" ${onclick}>
+                        <div class="participant-icon">👤</div>
+                        <div class="participant-name">${escapeHtml(name)}</div>
+                        ${viewedBadge}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectParticipant(name) {
+            selectedName = name;
+            document.getElementById('modalText').textContent =
+                `Ben jij ${name}? Klik op bevestigen om je lootje te bekijken.`;
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('confirmModal').classList.remove('active');
+            selectedName = null;
+        }
+
+        async function confirmDraw() {
+            // Save the name before closing modal (closeModal sets selectedName to null)
+            const nameToCheck = selectedName;
+            closeModal();
+
+            if (!nameToCheck) return;
+
             try {
                 const response = await fetch('/api/draw', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name })
+                    body: JSON.stringify({
+                        name: nameToCheck,
+                        eventUrl: eventUrl
+                    })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
+                    // Update viewedBy locally
+                    if (!lotteryStatus.viewedBy) {
+                        lotteryStatus.viewedBy = [];
+                    }
+                    if (!lotteryStatus.viewedBy.includes(data.giver)) {
+                        lotteryStatus.viewedBy.push(data.giver);
+                    }
+
+                    // Update the participants display
+                    displayParticipants(lotteryStatus.participants, lotteryStatus.viewedBy);
+
+                    // Show result
                     document.getElementById('giverName').textContent = data.giver;
                     document.getElementById('recipientName').textContent = data.recipient;
                     showScreen('resultScreen');
+                    showToast('Succes!', 'Je lootje is zichtbaar', 'success');
                 } else {
-                    alert('❌ ' + data.message);
+                    showToast('Fout', data.message, 'error');
                 }
             } catch (err) {
-                alert('Fout bij ophalen lootje: ' + err.message);
+                console.error('Error drawing lot:', err);
+                showToast('Fout', 'Kon lootje niet ophalen', 'error');
             }
         }
-        
+
         function reset() {
-            document.getElementById('nameInput').value = '';
-            showScreen('nameEntryScreen');
-            document.getElementById('nameInput').focus();
+            selectedName = null;
+            showScreen('participantsScreen');
         }
-        
+
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(screen => {
                 screen.classList.remove('active');
             });
             document.getElementById(screenId).classList.add('active');
+        }
+
+        // Toast notifications
+        function showToast(title, message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+
+            const icons = {
+                success: '✅',
+                error: '❌',
+                warning: '⚠️',
+                info: 'ℹ️'
+            };
+
+            toast.innerHTML = `
+                <div class="toast-icon">${icons[type] || icons.info}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${escapeHtml(title)}</div>
+                    <div class="toast-message">${escapeHtml(message)}</div>
+                </div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
     </script>
 </body>

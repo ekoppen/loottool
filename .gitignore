@@ -1,0 +1,29 @@
+# Environment variables (bevat gevoelige info)
+.env
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Database files
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+.dockerignore

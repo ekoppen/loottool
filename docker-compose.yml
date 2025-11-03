@@ -1,14 +1,16 @@
-version: '3.8'
-
 services:
   sinterklaas-lootjes:
     build: .
     container_name: sinterklaas-lootjes
     ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
-      - ADMIN_PASSWORD=sinterklaas2024
+      - "3512:3000"
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
+      - ./public:/app/public
+      - ./server.js:/app/server.js
+      - ./database.js:/app/database.js
+      # Exclude node_modules to prevent architecture conflicts
+      - /app/node_modules
     restart: unless-stopped

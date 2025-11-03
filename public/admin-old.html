@@ -18,16 +18,12 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
             min-height: 100vh;
-            height: 100vh;
             padding: 24px;
             position: relative;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            overflow-x: hidden;
         }
 
-        /* Static background */
+        /* Animated background */
         body::before {
             content: '';
             position: absolute;
@@ -39,20 +35,23 @@
                 radial-gradient(circle at 20% 50%, rgba(196, 30, 58, 0.4), transparent 50%),
                 radial-gradient(circle at 80% 80%, rgba(218, 165, 32, 0.3), transparent 50%),
                 radial-gradient(circle at 40% 20%, rgba(139, 69, 19, 0.4), transparent 50%);
+            animation: gradientShift 15s ease infinite;
             pointer-events: none;
-            opacity: 0.5;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.1); }
         }
 
         .container {
             max-width: 900px;
-            max-height: calc(100vh - 48px);
-            width: 100%;
+            margin: 0 auto;
             background: rgba(255, 255, 255, 0.92);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border-radius: 24px;
-            padding: 36px 40px;
-            overflow-y: auto;
+            padding: 48px 44px;
             box-shadow:
                 0 20px 60px rgba(0, 0, 0, 0.3),
                 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
@@ -82,6 +81,12 @@
             display: block;
             margin: 0 auto 20px auto;
             filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.2));
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
         }
 
         .subtitle {
@@ -92,29 +97,22 @@
             font-weight: 400;
         }
 
-        h2 {
-            font-family: 'Playfair Display', serif;
-            text-align: center;
-            color: #374151;
-            font-size: 1.6em;
-            font-weight: 700;
-            margin-bottom: 28px;
-            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
         .section {
             display: none;
+            animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .section.active {
             display: block;
         }
 
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .input-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         label {
@@ -127,7 +125,6 @@
 
         input[type="text"],
         input[type="password"],
-        input[type="email"],
         select {
             width: 100%;
             padding: 14px 16px;
@@ -143,14 +140,11 @@
             outline: none;
             border-color: #c41e3a;
             box-shadow: 0 0 0 4px rgba(196, 30, 58, 0.1);
+            transform: translateY(-2px);
         }
 
         button {
             width: 100%;
-            max-width: 350px;
-            margin-left: auto;
-            margin-right: auto;
-            display: block;
             padding: 14px 24px;
             background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
             color: white;
@@ -167,8 +161,28 @@
             margin-top: 8px;
         }
 
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s;
+        }
+
+        button:hover::before {
+            left: 100%;
+        }
+
         button:hover {
+            transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(196, 30, 58, 0.6);
+        }
+
+        button:active {
+            transform: translateY(0);
         }
 
         button.secondary {
@@ -188,16 +202,16 @@
         button.danger:hover {
             box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
         }
-
+        
         button.toggle-families {
-            background: linear-gradient(135deg, #daa520 0%, #b8860b 100%);
-            box-shadow: 0 4px 14px rgba(218, 165, 32, 0.4);
+            background: #17a2b8;
         }
-
+        
         button.toggle-families:hover {
-            box-shadow: 0 6px 20px rgba(218, 165, 32, 0.6);
+            background: #138496;
+            box-shadow: 0 2px 8px rgba(23, 162, 184, 0.3);
         }
-
+        
         .names-list {
             background: #f8f9fa;
             border: 1px solid #e9ecef;
@@ -207,7 +221,7 @@
             max-height: 300px;
             overflow-y: auto;
         }
-
+        
         .name-item {
             padding: 10px 12px;
             background: white;
@@ -217,79 +231,34 @@
             justify-content: space-between;
             align-items: center;
             border: 1px solid #e9ecef;
-            gap: 12px;
         }
-
-        .name-item > span {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            font-weight: 500;
-            color: #1f2937;
-        }
-
+        
         .family-badge {
-            background: linear-gradient(135deg, rgba(218, 165, 32, 0.15) 0%, rgba(184, 134, 11, 0.15) 100%);
-            color: #8b4513;
-            padding: 4px 12px;
+            background: #e7f3ff;
+            color: #004085;
+            padding: 3px 10px;
             border-radius: 12px;
             font-size: 11px;
-            font-weight: 600;
-            margin-left: 10px;
-            border: 1.5px solid rgba(218, 165, 32, 0.4);
-            cursor: pointer;
-            transition: all 0.2s;
+            font-weight: 500;
+            margin-left: 8px;
+            border: 1px solid #b8daff;
         }
-
-        .family-badge:hover {
-            background: linear-gradient(135deg, rgba(218, 165, 32, 0.25) 0%, rgba(184, 134, 11, 0.25) 100%);
-            border-color: rgba(218, 165, 32, 0.6);
-        }
-
-        .name-item-actions {
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
-
-        .edit-btn {
-            background: linear-gradient(135deg, #daa520 0%, #b8860b 100%);
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 600;
-            transition: all 0.2s;
-            width: auto;
-            margin: 0;
-            flex-shrink: 0;
-        }
-
-        .edit-btn:hover {
-            box-shadow: 0 2px 8px rgba(218, 165, 32, 0.4);
-        }
-
+        
         .remove-btn {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            background: #dc3545;
             color: white;
             border: none;
             padding: 6px 12px;
-            border-radius: 6px;
+            border-radius: 4px;
             cursor: pointer;
-            font-size: 11px;
-            font-weight: 600;
+            font-size: 12px;
             transition: all 0.2s;
-            width: auto;
-            margin: 0;
-            flex-shrink: 0;
         }
-
+        
         .remove-btn:hover {
-            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+            background: #c82333;
         }
-
+        
         .info, .warning, .success, .error {
             padding: 16px 20px;
             margin: 20px 0;
@@ -341,6 +310,7 @@
         }
 
         .stat-box:hover {
+            transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(196, 30, 58, 0.15);
         }
 
@@ -370,36 +340,47 @@
 
         .toast {
             background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-radius: 16px;
             padding: 18px 22px;
             margin-bottom: 16px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            box-shadow:
+                0 10px 40px rgba(0, 0, 0, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
             min-width: 320px;
             max-width: 400px;
             display: flex;
             align-items: center;
             gap: 14px;
-            border: 2px solid rgba(196, 30, 58, 0.3);
+            animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(196, 30, 58, 0.2);
         }
 
         .toast.success {
-            border-color: rgba(16, 185, 129, 0.5);
-            background: rgba(240, 253, 244, 0.98);
+            border-color: rgba(16, 185, 129, 0.3);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(5, 150, 105, 0.05) 100%);
         }
 
         .toast.error {
-            border-color: rgba(239, 68, 68, 0.5);
-            background: rgba(254, 242, 242, 0.98);
+            border-color: rgba(239, 68, 68, 0.3);
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, rgba(220, 38, 38, 0.05) 100%);
         }
 
         .toast.info {
-            border-color: rgba(59, 130, 246, 0.5);
-            background: rgba(239, 246, 255, 0.98);
+            border-color: rgba(59, 130, 246, 0.3);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(37, 99, 235, 0.05) 100%);
         }
 
-        .toast.warning {
-            border-color: rgba(251, 191, 36, 0.5);
-            background: rgba(254, 252, 232, 0.98);
+        @keyframes slideIn {
+            from {
+                transform: translateX(120%) scale(0.8);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0) scale(1);
+                opacity: 1;
+            }
         }
 
         .toast-icon {
@@ -433,7 +414,10 @@
             right: 0;
             bottom: 0;
             background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             z-index: 9999;
+            animation: fadeInOverlay 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .modal-overlay.active {
@@ -443,14 +427,40 @@
             padding: 20px;
         }
 
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
         .modal {
             background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-radius: 24px;
             padding: 40px 36px;
             max-width: 500px;
             width: 100%;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
             border: 1px solid rgba(255, 255, 255, 0.2);
+            animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0.8) translateY(40px);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
         }
 
         .modal-header {
@@ -462,6 +472,7 @@
             font-size: 3.5em;
             margin-bottom: 16px;
             filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1));
+            animation: float 3s ease-in-out infinite;
         }
 
         .modal-title {
@@ -520,7 +531,12 @@
             justify-content: space-between;
             align-items: center;
             gap: 14px;
-            margin-bottom: 12px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .event-url-link:hover {
+            border-color: rgba(196, 30, 58, 0.4);
+            box-shadow: 0 4px 12px rgba(196, 30, 58, 0.15);
         }
 
         .copy-btn {
@@ -535,11 +551,10 @@
             white-space: nowrap;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 0 2px 8px rgba(196, 30, 58, 0.3);
-            width: auto;
-            margin: 0;
         }
 
         .copy-btn:hover {
+            transform: translateY(-2px);
             box-shadow: 0 4px 14px rgba(196, 30, 58, 0.5);
         }
     </style>
@@ -562,109 +577,41 @@
             </div>
         </div>
     </div>
-
-    <!-- Edit Family Modal -->
-    <div class="modal-overlay" id="editFamilyModal">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-icon">👨‍👩‍👧‍👦</div>
-                <div class="modal-title">Wijzig gezinsnaam</div>
-            </div>
-            <div class="modal-text">
-                <span id="editFamilyPersonName" style="font-weight: 600; color: #1f2937;"></span>
-            </div>
-            <div class="input-group">
-                <label for="editFamilyInput">Gezinsnaam:</label>
-                <input type="text" id="editFamilyInput" list="editFamilyList" placeholder="bijv. Familie Jansen" autocomplete="off">
-                <datalist id="editFamilyList"></datalist>
-                <small id="existingFamiliesHint" style="color: #6b7280; font-size: 0.85em; margin-top: 4px; display: block;"></small>
-            </div>
-            <div class="modal-buttons">
-                <button class="secondary" onclick="closeEditFamilyModal()">Annuleren</button>
-                <button onclick="confirmEditFamily()">Opslaan</button>
-            </div>
-        </div>
-    </div>
-
     <div class="container">
         <img src="/sint.png" alt="Sinterklaas" class="sint-image">
-        <h1>Sinterklaas Lootjes</h1>
-        <p class="subtitle">Maak je eigen loting</p>
-
-        <!-- Welcome / Create New Event Section -->
-        <div id="welcomeSection" class="section active">
-            <h2>Start een nieuwe loting</h2>
-
+        <h1>Sinterklaas Lootjes - Admin</h1>
+        <p class="subtitle">Beheer de loting</p>
+        
+        <!-- Login Section -->
+        <div id="loginSection" class="section active">
             <div class="input-group">
-                <label for="eventName">Naam van je loting:</label>
-                <input type="text" id="eventName" placeholder="bijv. Familie Jansen 2024">
+                <label for="adminPassword">Admin Wachtwoord:</label>
+                <input type="password" id="adminPassword" placeholder="Wachtwoord...">
             </div>
-
-            <div class="input-group">
-                <label for="adminUsername">Kies een gebruikersnaam:</label>
-                <input type="text" id="adminUsername" placeholder="bijv. admin of je eigen naam">
-            </div>
-
-            <div class="input-group">
-                <label for="adminPasswordSetup">Kies een wachtwoord:</label>
-                <input type="password" id="adminPasswordSetup" placeholder="Minimaal 4 tekens">
-            </div>
-
-            <div class="input-group">
-                <label for="adminEmail">Emailadres (optioneel):</label>
-                <input type="email" id="adminEmail" placeholder="je@email.nl">
-                <small style="color: #6b7280; font-size: 0.85em; margin-top: 4px; display: block;">
-                    We sturen je de inloggegevens toe
-                </small>
-            </div>
-
-            <div class="info">
-                <strong>Tip:</strong> Bewaar je gebruikersnaam en wachtwoord goed! Je hebt deze nodig om je loting later te kunnen beheren.
-            </div>
-
-            <button onclick="showParticipantEntry()">Verder naar deelnemers</button>
-
-            <div style="text-align: center; margin-top: 20px;">
-                <p style="color: #6b7280; font-size: 0.9em;">
-                    Heb je al een loting? <a href="#" onclick="showLoginSection(); return false;" style="color: #c41e3a; text-decoration: none; font-weight: 600;">Login hier</a>
-                </p>
-            </div>
-        </div>
-
-        <!-- Login to Existing Event Section -->
-        <div id="loginSection" class="section">
-            <h2>Login bij je loting</h2>
-
-            <div class="input-group">
-                <label for="loginEventUrl">Event URL Code:</label>
-                <input type="text" id="loginEventUrl" placeholder="bijv. abc123def456">
-                <small style="color: #6b7280; font-size: 0.85em; margin-top: 4px; display: block;">
-                    De code uit je admin URL: /admin/<strong>abc123def456</strong>
-                </small>
-            </div>
-
-            <div class="input-group">
-                <label for="loginUsername">Gebruikersnaam:</label>
-                <input type="text" id="loginUsername" placeholder="Je gebruikersnaam">
-            </div>
-
-            <div class="input-group">
-                <label for="loginPassword">Wachtwoord:</label>
-                <input type="password" id="loginPassword" placeholder="Je wachtwoord">
-            </div>
-
             <button onclick="login()">Inloggen</button>
-            <button class="secondary" onclick="showWelcomeSection()">← Terug</button>
+            <div class="info" style="margin-top: 20px;">
+                ℹ️ Standaard wachtwoord: sinterklaas2024<br>
+                Je kunt dit wijzigen met ADMIN_PASSWORD environment variable
+            </div>
         </div>
-
-        <!-- Participant Entry Section -->
-        <div id="participantSection" class="section">
-            <h2>Voeg deelnemers toe</h2>
-
+        
+        <!-- Main Admin Section -->
+        <div id="adminSection" class="section">
+            <div id="currentConfig"></div>
+            
+            <button onclick="showCreateForm()">➕ Nieuwe Loting Maken</button>
+            <button class="secondary" onclick="loadConfig()">🔄 Ververs Status</button>
+            <button class="danger" onclick="resetLottery()">🗑️ Loting Verwijderen</button>
+        </div>
+        
+        <!-- Create Lottery Section -->
+        <div id="createSection" class="section">
+            <h2 style="color: #2c3e50; margin-bottom: 24px; font-size: 1.4em; font-weight: 600;">Nieuwe Loting Maken</h2>
+            
             <button class="toggle-families" onclick="toggleFamilyMode()" id="familyToggle">
-                Gezinsmodus Inschakelen
+                👨‍👩‍👧‍👦 Gezinsmodus Inschakelen
             </button>
-
+            
             <div id="simpleModeInputs">
                 <div class="input-group">
                     <label for="nameInput">Voer namen in:</label>
@@ -672,65 +619,50 @@
                 </div>
                 <button onclick="addName()">Naam Toevoegen</button>
             </div>
-
+            
             <div id="familyModeInputs" style="display: none;">
                 <div class="input-group">
-                    <label for="familyNameInput">Naam persoon:</label>
-                    <input type="text" id="familyNameInput" placeholder="bijv. Jan" autocomplete="off">
+                    <label for="familyNameInput">Naam:</label>
+                    <input type="text" id="familyNameInput" placeholder="Naam..." autocomplete="off">
                 </div>
                 <div class="input-group">
-                    <label for="familyGroupInput">Gezinsnaam:</label>
-                    <input type="text" id="familyGroupInput" list="familyList" placeholder="bijv. Familie Jansen" autocomplete="off">
-                    <datalist id="familyList"></datalist>
-                    <small style="color: #6b7280; font-size: 0.85em; margin-top: 4px; display: block;">
-                        Type een nieuwe naam of kies een bestaande
-                    </small>
+                    <label for="familySelect">Gezin:</label>
+                    <select id="familySelect">
+                        <option value="A">Gezin A 🏠</option>
+                        <option value="B">Gezin B 🏡</option>
+                        <option value="C">Gezin C 🏘️</option>
+                        <option value="D">Gezin D 🏚️</option>
+                        <option value="E">Gezin E 🏗️</option>
+                    </select>
                 </div>
                 <button onclick="addNameWithFamily()">Persoon Toevoegen</button>
                 <div class="info" style="margin-top: 15px;">
-                    <strong>Let op:</strong> Personen uit hetzelfde gezin kunnen elkaar niet trekken
+                    ℹ️ Gezinsleden kunnen elkaar niet trekken
                 </div>
             </div>
-
+            
             <div id="namesList" class="names-list" style="display: none;"></div>
-
+            
             <button id="createButton" onclick="createLottery()" style="display: none;">
-                Loting Aanmaken
+                🎁 Loting Aanmaken
             </button>
-            <button class="secondary" onclick="backToSetup()">Terug</button>
-        </div>
-
-        <!-- Admin Dashboard Section -->
-        <div id="adminSection" class="section">
-            <div id="currentConfig"></div>
-
-            <button class="danger" onclick="deleteLottery()">Loting Verwijderen</button>
-            <button class="secondary" onclick="logout()">Uitloggen</button>
+            <button class="secondary" onclick="backToAdmin()">Terug</button>
         </div>
     </div>
 
     <script>
-        let eventUrl = null;
-        let adminUsername = '';
         let adminPassword = '';
-        let adminEmail = '';
-        let eventName = '';
         let participants = [];
         let families = {};
         let familyMode = false;
         let socket = null;
 
+        // Check if lottery exists on load
         window.addEventListener('load', init);
 
         function init() {
-            // Check if we have an event URL in the path (e.g., /admin/abc123)
-            const pathParts = window.location.pathname.split('/');
-            if (pathParts[1] === 'admin' && pathParts[2]) {
-                eventUrl = pathParts[2];
-                showLoginSection();
-            }
-
             initializeSocket();
+            checkStatus();
         }
 
         function initializeSocket() {
@@ -738,146 +670,77 @@
 
             socket.on('connect', () => {
                 console.log('Admin connected to server');
-                if (eventUrl) {
-                    socket.emit('join-event', eventUrl);
+                socket.emit('join-admin');
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Admin disconnected from server');
+            });
+
+            // Listen for participant-viewed events
+            socket.on('participant-viewed', (data) => {
+                console.log('Admin: Participant viewed:', data);
+                // Refresh admin config to show updated stats
+                if (adminPassword) {
+                    loadConfig();
                 }
             });
 
-            socket.on('participant-viewed', (data) => {
-                console.log('Admin: Participant viewed:', data);
+            // Listen for lottery-created events
+            socket.on('lottery-created', (data) => {
+                console.log('Admin: Lottery created:', data);
                 loadConfig();
             });
 
+            // Listen for lottery-reset events
             socket.on('lottery-reset', () => {
                 console.log('Admin: Lottery reset');
-                showToast('Loting verwijderd', 'Deze loting is verwijderd', 'warning');
-                logout();
+                loadConfig();
             });
         }
 
-        function showWelcomeSection() {
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.getElementById('welcomeSection').classList.add('active');
-        }
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
 
-        function showLoginSection() {
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.getElementById('loginSection').classList.add('active');
-            if (eventUrl) {
-                document.getElementById('loginEventUrl').value = eventUrl;
+                if (data.exists) {
+                    document.getElementById('loginSection').classList.add('active');
+                }
+            } catch (err) {
+                console.error('Error checking status:', err);
             }
         }
-
-        function showParticipantEntry() {
-            const name = document.getElementById('eventName').value.trim();
-            const username = document.getElementById('adminUsername').value.trim();
-            const password = document.getElementById('adminPasswordSetup').value.trim();
-            const email = document.getElementById('adminEmail').value.trim();
-
-            if (!name) {
-                showToast('Validatie', 'Voer een naam in voor je loting', 'error');
-                return;
-            }
-
-            if (!username) {
-                showToast('Validatie', 'Kies een gebruikersnaam', 'error');
-                return;
-            }
-
-            if (!password || password.length < 4) {
-                showToast('Validatie', 'Wachtwoord moet minimaal 4 tekens zijn', 'error');
-                return;
-            }
-
-            // Optional email validation
-            if (email && !email.includes('@')) {
-                showToast('Validatie', 'Voer een geldig emailadres in', 'error');
-                return;
-            }
-
-            eventName = name;
-            adminUsername = username;
-            adminPassword = password;
-            adminEmail = email;
-
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.getElementById('participantSection').classList.add('active');
-        }
-
-        function backToSetup() {
-            participants = [];
-            families = {};
-            familyMode = false;
-            updateNamesList();
-
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.getElementById('welcomeSection').classList.add('active');
-        }
-
+        
         async function login() {
-            const url = document.getElementById('loginEventUrl').value.trim();
-            const username = document.getElementById('loginUsername').value.trim();
-            const password = document.getElementById('loginPassword').value.trim();
-
-            if (!url || !username || !password) {
-                showToast('Validatie', 'Vul alle velden in', 'error');
-                return;
-            }
+            const password = document.getElementById('adminPassword').value;
 
             try {
                 const response = await fetch('/api/admin/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ eventUrl: url, username, password })
+                    body: JSON.stringify({ password })
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    eventUrl = url;
-                    adminUsername = username;
                     adminPassword = password;
-
-                    // Join socket room
-                    socket.emit('join-event', eventUrl);
-
-                    // Load config and show admin section
-                    await loadConfig();
-                    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+                    document.getElementById('loginSection').classList.remove('active');
                     document.getElementById('adminSection').classList.add('active');
-                    showToast('Welkom!', 'Je bent ingelogd', 'success');
+                    loadConfig();
+                    showToast('Welkom!', 'Je bent ingelogd als admin', 'success');
                 } else {
-                    showToast('Fout', data.message, 'error');
+                    showToast('Fout', 'Incorrect wachtwoord', 'error');
                 }
             } catch (err) {
                 showToast('Fout', 'Fout bij inloggen: ' + err.message, 'error');
             }
         }
-
-        function logout() {
-            eventUrl = null;
-            adminUsername = '';
-            adminPassword = '';
-            eventName = '';
-            participants = [];
-            families = {};
-
-            document.getElementById('eventName').value = '';
-            document.getElementById('adminUsername').value = '';
-            document.getElementById('adminPasswordSetup').value = '';
-            document.getElementById('loginEventUrl').value = '';
-            document.getElementById('loginUsername').value = '';
-            document.getElementById('loginPassword').value = '';
-
-            showWelcomeSection();
-            showToast('Uitgelogd', 'Je bent uitgelogd', 'info');
-        }
-
+        
         async function loadConfig() {
-            if (!eventUrl) return;
-
             try {
-                const response = await fetch(`/api/admin/config?eventUrl=${eventUrl}`);
+                const response = await fetch('/api/admin/config');
                 const data = await response.json();
 
                 const configDiv = document.getElementById('currentConfig');
@@ -885,26 +748,21 @@
                 if (data.participants.length > 0) {
                     const viewedCount = data.viewedBy ? data.viewedBy.length : 0;
                     const viewedPercentage = Math.round((viewedCount / data.participants.length) * 100);
-                    const participantUrl = `${window.location.origin}/event/${data.eventUrl}`;
-                    const adminUrl = `${window.location.origin}/admin/${data.eventUrl}`;
+                    const eventUrl = data.eventUrl ? `${window.location.origin}/event/${data.eventUrl}` : null;
 
                     configDiv.innerHTML = `
-                        <h2>${escapeHtml(data.eventName)}</h2>
                         <div class="success">
-                            ✅ Je loting is actief!
+                            ✅ Er is een actieve loting!
                         </div>
+                        ${eventUrl ? `
                         <div class="event-url-box">
-                            <div class="event-url-label">Deel deze link met deelnemers:</div>
+                            <div class="event-url-label">🔗 Deel deze link met deelnemers:</div>
                             <div class="event-url-link">
-                                <span>${participantUrl}</span>
-                                <button class="copy-btn" onclick="copyUrl('${participantUrl}')">Kopieer</button>
-                            </div>
-                            <div class="event-url-label">Jouw admin link (niet delen!):</div>
-                            <div class="event-url-link">
-                                <span>${adminUrl}</span>
-                                <button class="copy-btn" onclick="copyUrl('${adminUrl}')">Kopieer</button>
+                                <span>${eventUrl}</span>
+                                <button class="copy-btn" onclick="copyUrl('${eventUrl}')">Kopieer</button>
                             </div>
                         </div>
+                        ` : ''}
                         <div class="stats">
                             <div class="stat-box">
                                 <div class="stat-number">${data.participants.length}</div>
@@ -922,37 +780,58 @@
                         <div class="info">
                             <strong>Deelnemers:</strong><br>
                             ${data.participants.map(p => {
-                                const familyBadge = data.familyMode && data.families[p] ? `<span class="family-badge">${escapeHtml(data.families[p])}</span>` : '';
+                                const familyBadge = data.familyMode ? `<span class="family-badge">Gezin ${data.families[p]}</span>` : '';
                                 const viewed = data.viewedBy && data.viewedBy.includes(p) ? ' ✅' : '';
-                                return `${escapeHtml(p)}${familyBadge}${viewed}`;
+                                return `${p}${familyBadge}${viewed}`;
                             }).join(', ')}
                         </div>
-                        ${data.created ? `<div class="info"><strong>Aangemaakt:</strong> ${new Date(data.created).toLocaleString('nl-NL')}</div>` : ''}
+                        ${data.created ? `<div class="info">📅 Aangemaakt: ${new Date(data.created).toLocaleString('nl-NL')}</div>` : ''}
+                    `;
+                } else {
+                    configDiv.innerHTML = `
+                        <div class="warning">
+                            ⚠️ Er is nog geen loting aangemaakt.
+                        </div>
                     `;
                 }
             } catch (err) {
                 showToast('Fout', 'Kon configuratie niet laden', 'error');
             }
         }
-
+        
+        function showCreateForm() {
+            document.getElementById('adminSection').classList.remove('active');
+            document.getElementById('createSection').classList.add('active');
+            participants = [];
+            families = {};
+            familyMode = false;
+            updateNamesList();
+        }
+        
+        function backToAdmin() {
+            document.getElementById('createSection').classList.remove('active');
+            document.getElementById('adminSection').classList.add('active');
+            loadConfig();
+        }
+        
         function toggleFamilyMode() {
             familyMode = !familyMode;
             const toggle = document.getElementById('familyToggle');
             const simpleInputs = document.getElementById('simpleModeInputs');
             const familyInputs = document.getElementById('familyModeInputs');
-
+            
             if (familyMode) {
-                toggle.textContent = 'Gewone Modus';
+                toggle.textContent = '👤 Gewone Modus';
                 simpleInputs.style.display = 'none';
                 familyInputs.style.display = 'block';
                 document.getElementById('familyNameInput').focus();
             } else {
-                toggle.textContent = 'Gezinsmodus Inschakelen';
+                toggle.textContent = '👨‍👩‍👧‍👦 Gezinsmodus Inschakelen';
                 simpleInputs.style.display = 'block';
                 familyInputs.style.display = 'none';
                 document.getElementById('nameInput').focus();
             }
-
+            
             if (participants.length > 0) {
                 if (confirm('Wil je de huidige lijst wissen?')) {
                     participants = [];
@@ -961,25 +840,15 @@
                 }
             }
         }
-
+        
         document.getElementById('nameInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') addName();
         });
-
+        
         document.getElementById('familyNameInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                document.getElementById('familyGroupInput').focus();
-            }
+            if (e.key === 'Enter') addNameWithFamily();
         });
-
-        document.getElementById('familyGroupInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                addNameWithFamily();
-            }
-        });
-
+        
         function addName() {
             const input = document.getElementById('nameInput');
             const name = input.value.trim();
@@ -1002,18 +871,13 @@
         }
 
         function addNameWithFamily() {
-            const nameInput = document.getElementById('familyNameInput');
-            const familyInput = document.getElementById('familyGroupInput');
-            const name = nameInput.value.trim();
-            const family = familyInput.value.trim();
+            const input = document.getElementById('familyNameInput');
+            const familySelect = document.getElementById('familySelect');
+            const name = input.value.trim();
+            const family = familySelect.value;
 
             if (name === '') {
                 showToast('Validatie', 'Voer een naam in', 'error');
-                return;
-            }
-
-            if (family === '') {
-                showToast('Validatie', 'Voer een gezinsnaam in', 'error');
                 return;
             }
 
@@ -1024,47 +888,33 @@
 
             participants.push(name);
             families[name] = family;
-
-            // Update datalist with unique family names
-            updateFamilyDatalist();
-
-            nameInput.value = '';
+            input.value = '';
             updateNamesList();
-            nameInput.focus();
-            showToast('Toegevoegd', `${name} is toegevoegd aan ${family}`, 'success');
+            input.focus();
+            showToast('Toegevoegd', `${name} (Gezin ${family}) is toegevoegd`, 'success');
         }
-
-        function updateFamilyDatalist() {
-            const datalist = document.getElementById('familyList');
-            const uniqueFamilies = [...new Set(Object.values(families))];
-            datalist.innerHTML = uniqueFamilies.map(f => `<option value="${escapeHtml(f)}">`).join('');
-        }
-
+        
         function updateNamesList() {
             const list = document.getElementById('namesList');
             const createButton = document.getElementById('createButton');
-
+            
             if (participants.length === 0) {
                 list.style.display = 'none';
                 createButton.style.display = 'none';
                 return;
             }
-
+            
             list.style.display = 'block';
             list.innerHTML = participants.map((name, index) => {
-                const familyBadge = familyMode ? `<span class="family-badge" onclick="editFamily(${index})" title="Klik om gezin te wijzigen">${escapeHtml(families[name])}</span>` : '';
-                const editBtn = familyMode ? `<button class="edit-btn" onclick="editFamily(${index})" title="Wijzig gezin">Wijzig</button>` : '';
+                const familyBadge = familyMode ? `<span class="family-badge">Gezin ${families[name]}</span>` : '';
                 return `
                     <div class="name-item">
-                        <span>${escapeHtml(name)}${familyBadge}</span>
-                        <div class="name-item-actions">
-                            ${editBtn}
-                            <button class="remove-btn" onclick="removeName(${index})" title="Verwijder persoon">Verwijder</button>
-                        </div>
+                        <span>${name}${familyBadge}</span>
+                        <button class="remove-btn" onclick="removeName(${index})">Verwijder</button>
                     </div>
                 `;
             }).join('');
-
+            
             if (participants.length >= 3) {
                 if (familyMode) {
                     const uniqueFamilies = new Set(Object.values(families)).size;
@@ -1078,73 +928,7 @@
                 createButton.style.display = 'none';
             }
         }
-
-        let editingFamilyIndex = null;
-
-        function editFamily(index) {
-            editingFamilyIndex = index;
-            const name = participants[index];
-            const currentFamily = families[name] || '';
-
-            // Update modal content
-            document.getElementById('editFamilyPersonName').textContent = name;
-            document.getElementById('editFamilyInput').value = currentFamily;
-
-            // Update datalist with existing families
-            const uniqueFamilies = [...new Set(Object.values(families))];
-            const datalist = document.getElementById('editFamilyList');
-            datalist.innerHTML = uniqueFamilies.map(f => `<option value="${escapeHtml(f)}">`).join('');
-
-            // Update hint text
-            const hint = document.getElementById('existingFamiliesHint');
-            if (uniqueFamilies.length > 0) {
-                hint.textContent = `Bestaande gezinnen: ${uniqueFamilies.join(', ')}`;
-            } else {
-                hint.textContent = '';
-            }
-
-            // Show modal
-            document.getElementById('editFamilyModal').classList.add('active');
-            // Focus input after animation
-            setTimeout(() => {
-                document.getElementById('editFamilyInput').focus();
-                document.getElementById('editFamilyInput').select();
-            }, 100);
-        }
-
-        function closeEditFamilyModal() {
-            document.getElementById('editFamilyModal').classList.remove('active');
-            editingFamilyIndex = null;
-        }
-
-        function confirmEditFamily() {
-            if (editingFamilyIndex === null) return;
-
-            const name = participants[editingFamilyIndex];
-            const newFamily = document.getElementById('editFamilyInput').value.trim();
-
-            if (newFamily === '') {
-                showToast('Fout', 'Gezinsnaam mag niet leeg zijn', 'error');
-                return;
-            }
-
-            families[name] = newFamily;
-            updateFamilyDatalist();
-            updateNamesList();
-            showToast('Gewijzigd', `${name} verplaatst naar ${newFamily}`, 'success');
-            closeEditFamilyModal();
-        }
-
-        // Add enter key support for edit family modal
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('editFamilyInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    confirmEditFamily();
-                }
-            });
-        });
-
+        
         function removeName(index) {
             const name = participants[index];
             participants.splice(index, 1);
@@ -1153,7 +937,7 @@
             }
             updateNamesList();
         }
-
+        
         let modalCallback = null;
 
         function showModal(title, text, icon, confirmText, callback, buttonClass = '') {
@@ -1204,10 +988,7 @@
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                eventName,
-                                adminUsername,
-                                adminPassword,
-                                adminEmail,
+                                password: adminPassword,
                                 participants,
                                 families,
                                 familyMode
@@ -1217,20 +998,8 @@
                         const data = await response.json();
 
                         if (data.success) {
-                            eventUrl = data.eventUrl;
-
-                            // Update URL without reload
-                            window.history.pushState({}, '', `/admin/${eventUrl}`);
-
-                            // Join socket room
-                            socket.emit('join-event', eventUrl);
-
-                            // Load and show admin section
-                            await loadConfig();
-                            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-                            document.getElementById('adminSection').classList.add('active');
-
-                            showToast('Succes!', 'Loting succesvol aangemaakt!', 'success');
+                            showToast('Succes!', 'Loting succesvol aangemaakt', 'success');
+                            backToAdmin();
                         } else {
                             showToast('Fout', data.message, 'error');
                         }
@@ -1241,29 +1010,25 @@
             );
         }
 
-        async function deleteLottery() {
+        async function resetLottery() {
             showModal(
                 'Loting verwijderen',
-                'Weet je zeker dat je deze loting wilt verwijderen? Dit kan niet ongedaan worden gemaakt!',
+                'Weet je zeker dat je de huidige loting wilt verwijderen? Dit kan niet ongedaan worden gemaakt!',
                 '⚠️',
                 'Ja, verwijder',
                 async () => {
                     try {
-                        const response = await fetch('/api/admin/delete', {
+                        const response = await fetch('/api/admin/reset', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                eventUrl,
-                                username: adminUsername,
-                                password: adminPassword
-                            })
+                            body: JSON.stringify({ password: adminPassword })
                         });
 
                         const data = await response.json();
 
                         if (data.success) {
                             showToast('Verwijderd', 'Loting is verwijderd', 'success');
-                            logout();
+                            loadConfig();
                         } else {
                             showToast('Fout', data.message, 'error');
                         }
