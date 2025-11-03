@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  sinterklaas-lootjes:
+    build: .
+    container_name: sinterklaas-lootjes
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - ADMIN_PASSWORD=sinterklaas2024
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

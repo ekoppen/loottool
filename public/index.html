@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sinterklaas Lootjes</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            border: 1px solid #e8ebed;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 8px;
+            font-size: 1.75em;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #6c757d;
+            margin-bottom: 32px;
+            font-size: 1em;
+            font-weight: 400;
+        }
+        
+        .emoji {
+            font-size: 2.5em;
+            text-align: center;
+            margin: 16px 0 24px 0;
+        }
+        
+        .screen {
+            display: none;
+            animation: fadeIn 0.3s;
+        }
+        
+        .screen.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .input-group {
+            margin-bottom: 24px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #495057;
+            font-weight: 500;
+            font-size: 0.9em;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 15px;
+            transition: all 0.2s;
+            background: #fff;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #4a90e2;
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px 20px;
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: #357abd;
+            box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        button.secondary {
+            background: #6c757d;
+            color: white;
+            margin-top: 8px;
+        }
+        
+        button.secondary:hover {
+            background: #5a6268;
+            box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+        }
+        
+        .result-box {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 32px 24px;
+            text-align: center;
+            margin: 24px 0;
+        }
+        
+        .result-name {
+            font-size: 1.75em;
+            font-weight: 600;
+            color: #2c3e50;
+            margin: 8px 0;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 3px solid #ffc107;
+            padding: 12px 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+            color: #856404;
+            font-size: 0.9em;
+        }
+        
+        .info {
+            background: #e7f3ff;
+            border-left: 3px solid #4a90e2;
+            padding: 12px 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+            color: #004085;
+            font-size: 0.9em;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border-left: 3px solid #dc3545;
+            padding: 12px 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+            color: #721c24;
+            font-size: 0.9em;
+        }
+        
+        .admin-link {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .admin-link a {
+            color: #6c757d;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        
+        .admin-link a:hover {
+            color: #495057;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎅 Sinterklaas Lootjes</h1>
+        <p class="subtitle">Wie mag jij verrassen?</p>
+        
+        <!-- Loading Screen -->
+        <div id="loadingScreen" class="screen active">
+            <div class="emoji">⏳</div>
+            <p style="text-align: center; color: #666;">Laden...</p>
+        </div>
+        
+        <!-- No Lottery Screen -->
+        <div id="noLotteryScreen" class="screen">
+            <div class="emoji">📭</div>
+            <div class="error">
+                Er is nog geen loting aangemaakt.
+            </div>
+            <p style="text-align: center; color: #666; margin: 20px 0;">
+                Neem contact op met de organisator om een loting aan te maken.
+            </p>
+            <button onclick="checkStatus()">🔄 Opnieuw Controleren</button>
+        </div>
+        
+        <!-- Name Entry Screen -->
+        <div id="nameEntryScreen" class="screen">
+            <div class="emoji">👤</div>
+            <div class="input-group">
+                <label for="nameInput">Wat is je naam?</label>
+                <input type="text" id="nameInput" placeholder="Jouw naam..." autocomplete="off">
+            </div>
+            <button onclick="drawLot()">Toon Mijn Lootje 🎁</button>
+            
+            <div class="info" style="margin-top: 20px;">
+                ℹ️ Voer je naam precies in zoals deze is geregistreerd
+            </div>
+        </div>
+        
+        <!-- Result Screen -->
+        <div id="resultScreen" class="screen">
+            <div class="emoji">🎁</div>
+            <p style="text-align: center; margin-bottom: 10px;">
+                <strong id="giverName"></strong>, jij mag een surprise maken voor:
+            </p>
+            <div class="result-box">
+                <div class="result-name" id="recipientName"></div>
+            </div>
+            <div class="warning">
+                🤫 Onthoud deze naam en vertel het aan niemand!
+            </div>
+            <button class="secondary" onclick="reset()">Afsluiten</button>
+        </div>
+        
+        <!-- Admin Link -->
+        <div class="admin-link">
+            <a href="/admin.html">🔧 Admin Login</a>
+        </div>
+    </div>
+
+    <script>
+        let lotteryStatus = null;
+        
+        window.addEventListener('load', checkStatus);
+        
+        document.getElementById('nameInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') drawLot();
+        });
+        
+        async function checkStatus() {
+            showScreen('loadingScreen');
+            
+            try {
+                const response = await fetch('/api/status');
+                lotteryStatus = await response.json();
+                
+                if (lotteryStatus.exists) {
+                    showScreen('nameEntryScreen');
+                    document.getElementById('nameInput').focus();
+                } else {
+                    showScreen('noLotteryScreen');
+                }
+            } catch (err) {
+                console.error('Error checking status:', err);
+                showScreen('noLotteryScreen');
+            }
+        }
+        
+        async function drawLot() {
+            const nameInput = document.getElementById('nameInput');
+            const name = nameInput.value.trim();
+            
+            if (name === '') {
+                alert('Voer je naam in!');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/draw', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('giverName').textContent = data.giver;
+                    document.getElementById('recipientName').textContent = data.recipient;
+                    showScreen('resultScreen');
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            } catch (err) {
+                alert('Fout bij ophalen lootje: ' + err.message);
+            }
+        }
+        
+        function reset() {
+            document.getElementById('nameInput').value = '';
+            showScreen('nameEntryScreen');
+            document.getElementById('nameInput').focus();
+        }
+        
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+    </script>
+</body>
+</html>
