@@ -362,10 +362,10 @@ function createAssignments(names, families, familyMode) {
 }
 
 // Start server
-server.listen(PORT, () => {
-    console.log(`🎅 Sinterklaas Lootjes Server draait op http://localhost:${PORT}`);
-    console.log(`🔧 Admin interface: http://localhost:${PORT}/admin.html`);
-    console.log(`🎁 Deelnemers interface: http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🎅 Sinterklaas Lootjes Server draait op http://0.0.0.0:${PORT}`);
+    console.log(`🔧 Admin interface: http://0.0.0.0:${PORT}/admin.html`);
+    console.log(`🎁 Deelnemers interface: http://0.0.0.0:${PORT}`);
     console.log(`🔌 WebSocket server actief`);
     console.log(`✨ Multi-tenant: elke loting heeft eigen admin credentials`);
 });

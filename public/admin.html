@@ -294,15 +294,15 @@
             padding: 16px 20px;
             margin: 20px 0;
             border-radius: 12px;
-            border-left: 4px solid;
+            border: 2px solid;
             font-size: 0.9em;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
 
         .info {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.1) 100%);
-            border-color: #3b82f6;
-            color: #1e40af;
+            background: rgba(255, 255, 255, 0.8);
+            border-color: #e5e7eb;
+            color: #374151;
         }
 
         .warning {
@@ -493,54 +493,66 @@
 
         /* Event URL Display */
         .event-url-box {
-            background: linear-gradient(135deg, rgba(196, 30, 58, 0.1) 0%, rgba(139, 69, 19, 0.1) 100%);
-            border: 2px solid rgba(196, 30, 58, 0.3);
-            border-radius: 16px;
-            padding: 20px;
-            margin: 24px 0;
-            box-shadow: 0 4px 12px rgba(196, 30, 58, 0.1);
-        }
-
-        .event-url-label {
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 12px;
-            font-size: 0.95em;
-        }
-
-        .event-url-link {
-            background: white;
-            padding: 14px 16px;
-            border-radius: 12px;
-            border: 2px solid rgba(196, 30, 58, 0.2);
-            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-            font-size: 0.85em;
-            word-break: break-all;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 12px;
+            gap: 12px;
+            margin: 24px 0;
+        }
+
+        .url-card {
+            flex: 1;
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .url-card:hover {
+            border-color: #c41e3a;
+            box-shadow: 0 4px 12px rgba(196, 30, 58, 0.15);
+        }
+
+        .url-card-label {
+            font-size: 0.75em;
+            font-weight: 600;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .url-card-type {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 4px;
         }
 
         .copy-btn {
             background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
             color: white;
             border: none;
-            padding: 8px 16px;
+            padding: 10px 20px;
             border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.85em;
+            font-size: 0.9em;
             font-weight: 600;
-            white-space: nowrap;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            transition: all 0.3s;
             box-shadow: 0 2px 8px rgba(196, 30, 58, 0.3);
-            width: auto;
-            margin: 0;
+            width: 100%;
         }
 
         .copy-btn:hover {
             box-shadow: 0 4px 14px rgba(196, 30, 58, 0.5);
+            transform: translateY(-1px);
+        }
+
+        @media (max-width: 640px) {
+            .event-url-box {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -894,15 +906,15 @@
                             ✅ Je loting is actief!
                         </div>
                         <div class="event-url-box">
-                            <div class="event-url-label">Deel deze link met deelnemers:</div>
-                            <div class="event-url-link">
-                                <span>${participantUrl}</span>
-                                <button class="copy-btn" onclick="copyUrl('${participantUrl}')">Kopieer</button>
+                            <div class="url-card">
+                                <div class="url-card-label">Deelnemers Link</div>
+                                <div class="url-card-type">🎁 Lootjes Trekken</div>
+                                <button class="copy-btn" onclick="copyUrl('${participantUrl}')">Kopieer Link</button>
                             </div>
-                            <div class="event-url-label">Jouw admin link (niet delen!):</div>
-                            <div class="event-url-link">
-                                <span>${adminUrl}</span>
-                                <button class="copy-btn" onclick="copyUrl('${adminUrl}')">Kopieer</button>
+                            <div class="url-card">
+                                <div class="url-card-label">Admin Link (Privé)</div>
+                                <div class="url-card-type">⚙️ Beheren</div>
+                                <button class="copy-btn" onclick="copyUrl('${adminUrl}')">Kopieer Link</button>
                             </div>
                         </div>
                         <div class="stats">
