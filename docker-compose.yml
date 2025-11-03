@@ -8,9 +8,6 @@ services:
       - .env
     volumes:
       - ./data:/app/data
-      - ./public:/app/public
-      - ./server.js:/app/server.js
-      - ./database.js:/app/database.js
-      # Exclude node_modules to prevent architecture conflicts
-      - /app/node_modules
+      # Don't mount node_modules or JS files - use container versions
+      # This prevents binary compatibility issues with better-sqlite3
     restart: unless-stopped
