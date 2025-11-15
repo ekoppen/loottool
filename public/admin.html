@@ -716,8 +716,47 @@
         <div id="adminSection" class="section">
             <div id="currentConfig"></div>
 
+            <button onclick="showRecoveryModal()" style="margin-bottom: 12px;">🔄 Recovery Link Maken</button>
             <button class="danger" onclick="deleteLottery()">Loting Verwijderen</button>
             <button class="secondary" onclick="logout()">Uitloggen</button>
+        </div>
+
+        <!-- Recovery Modal -->
+        <div class="modal-overlay" id="recoveryModal">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-icon">🔄</div>
+                    <div class="modal-title">Recovery Link Maken</div>
+                </div>
+                <div class="modal-text">
+                    Iemand vergeten wie ze getrokken heeft? Maak een recovery link aan!
+                </div>
+                <div class="info" style="margin-bottom: 20px; text-align: left;">
+                    <strong>Hoe werkt het?</strong><br>
+                    1. Vul het emailadres in van de persoon die het vergeten is<br>
+                    2. Deel de recovery link met IEDEREEN<br>
+                    3. Iedereen (behalve degene die het vergat) klikt op de naam die ze trokken<br>
+                    4. Bij de laatste klik wordt automatisch een email verstuurd met het juiste antwoord
+                </div>
+                <div class="input-group">
+                    <label for="recoveryEmail">Email van persoon die het vergeten is</label>
+                    <input type="email" id="recoveryEmail" placeholder="naam@example.com">
+                </div>
+                <div class="modal-buttons">
+                    <button class="secondary" onclick="closeRecoveryModal()">Annuleren</button>
+                    <button class="primary" onclick="createRecoverySession()">Aanmaken</button>
+                </div>
+                <div id="recoveryLinkBox" style="display: none; margin-top: 20px;">
+                    <div class="success" style="margin-bottom: 12px;">
+                        ✅ Recovery link aangemaakt!
+                    </div>
+                    <div class="url-card">
+                        <div class="url-card-label">Recovery Link</div>
+                        <div class="url-card-url" id="recoveryUrl"></div>
+                        <button class="copy-btn" onclick="copyRecoveryUrl()">Kopieer Link</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1327,6 +1366,72 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Recovery functions
+        let currentRecoveryUrl = '';
+
+        function showRecoveryModal() {
+            document.getElementById('recoveryModal').classList.add('active');
+            document.getElementById('recoveryEmail').value = '';
+            document.getElementById('recoveryLinkBox').style.display = 'none';
+            currentRecoveryUrl = '';
+        }
+
+        function closeRecoveryModal() {
+            document.getElementById('recoveryModal').classList.remove('active');
+        }
+
+        async function createRecoverySession() {
+            const recoveryEmail = document.getElementById('recoveryEmail').value.trim();
+
+            if (!recoveryEmail) {
+                showToast('Validatie', 'Voer een emailadres in', 'error');
+                return;
+            }
+
+            if (!recoveryEmail.includes('@')) {
+                showToast('Validatie', 'Voer een geldig emailadres in', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/recovery/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        eventUrl: eventUrl,
+                        username: adminUsername,
+                        password: adminPassword,
+                        recoveryEmail: recoveryEmail
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentRecoveryUrl = data.fullUrl;
+                    document.getElementById('recoveryUrl').textContent = data.fullUrl;
+                    document.getElementById('recoveryLinkBox').style.display = 'block';
+                    showToast('Succes', 'Recovery link aangemaakt!', 'success');
+                } else {
+                    showToast('Fout', data.message, 'error');
+                }
+            } catch (err) {
+                console.error('Error creating recovery session:', err);
+                showToast('Fout', 'Kon recovery sessie niet aanmaken', 'error');
+            }
+        }
+
+        function copyRecoveryUrl() {
+            if (!currentRecoveryUrl) return;
+
+            navigator.clipboard.writeText(currentRecoveryUrl).then(() => {
+                showToast('Gekopieerd!', 'Recovery link gekopieerd naar klembord', 'success');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                showToast('Fout', 'Kon link niet kopiëren', 'error');
+            });
         }
     </script>
 </body>

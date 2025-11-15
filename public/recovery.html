@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lootje Herinnering - Sinterklaas</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;900&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
+            min-height: 100vh;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(196, 30, 58, 0.4), transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(218, 165, 32, 0.3), transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(139, 69, 19, 0.4), transparent 50%);
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 32px 36px;
+            max-width: 600px;
+            max-height: calc(100vh - 40px);
+            width: 100%;
+            overflow-y: auto;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+            border: 1px solid rgba(218, 165, 32, 0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        h1 {
+            font-family: 'Playfair Display', serif;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 8px;
+            font-size: 2em;
+            font-weight: 900;
+            letter-spacing: 0.02em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 32px;
+            font-size: 0.95em;
+            font-weight: 400;
+        }
+
+        .kado-icon {
+            width: 80px;
+            height: auto;
+            display: block;
+            margin: 0 auto 16px auto;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        .info {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.1) 100%);
+            border-left: 4px solid #3b82f6;
+            padding: 16px 20px;
+            margin: 16px 0;
+            border-radius: 12px;
+            color: #1e40af;
+            font-size: 0.9em;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+        }
+
+        .success {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+            border-left: 4px solid #10b981;
+            padding: 16px 20px;
+            margin: 16px 0;
+            border-radius: 12px;
+            color: #065f46;
+            font-size: 0.9em;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+        }
+
+        .error {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
+            border-left: 4px solid #ef4444;
+            padding: 16px 20px;
+            margin: 16px 0;
+            border-radius: 12px;
+            color: #991b1b;
+            font-size: 0.9em;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
+        }
+
+        .progress-box {
+            background: linear-gradient(135deg, rgba(196, 30, 58, 0.05) 0%, rgba(139, 69, 19, 0.05) 100%);
+            border: 2px solid rgba(196, 30, 58, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            margin: 24px 0;
+        }
+
+        .progress-text {
+            font-size: 1.5em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .progress-label {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+
+        .participants-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+            margin: 28px 0;
+        }
+
+        .participant-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid rgba(196, 30, 58, 0.2);
+            border-radius: 16px;
+            padding: 20px 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .participant-card:hover {
+            background: linear-gradient(135deg, rgba(196, 30, 58, 0.15) 0%, rgba(139, 69, 19, 0.15) 100%);
+            border-color: rgba(196, 30, 58, 0.5);
+            box-shadow: 0 12px 28px rgba(196, 30, 58, 0.25);
+            transform: translateY(-2px);
+        }
+
+        .participant-card.clicked {
+            opacity: 0.5;
+            cursor: default;
+            pointer-events: none;
+        }
+
+        .participant-icon {
+            font-size: 2.5em;
+            margin-bottom: 8px;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+        }
+
+        .participant-name {
+            font-weight: 600;
+            color: #1f2937;
+            font-size: 0.95em;
+            letter-spacing: -0.01em;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 9999;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .modal {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 24px;
+            padding: 40px 36px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .modal-icon {
+            font-size: 3.5em;
+            margin-bottom: 16px;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1));
+        }
+
+        .modal-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .modal-text {
+            color: #6b7280;
+            text-align: center;
+            margin-bottom: 28px;
+            line-height: 1.6;
+            font-size: 1em;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: inherit;
+        }
+
+        button.secondary {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            color: white;
+            box-shadow: 0 4px 14px rgba(107, 114, 128, 0.4);
+        }
+
+        button.secondary:hover {
+            box-shadow: 0 6px 20px rgba(107, 114, 128, 0.6);
+        }
+
+        button.primary {
+            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
+            color: white;
+            box-shadow: 0 4px 14px rgba(196, 30, 58, 0.4);
+        }
+
+        button.primary:hover {
+            box-shadow: 0 6px 20px rgba(196, 30, 58, 0.6);
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 10000;
+        }
+
+        .toast {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 16px;
+            padding: 18px 22px;
+            margin-bottom: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            min-width: 320px;
+            max-width: 400px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            border: 2px solid rgba(196, 30, 58, 0.3);
+        }
+
+        .toast.success {
+            border-color: rgba(16, 185, 129, 0.5);
+            background: rgba(240, 253, 244, 0.98);
+        }
+
+        .toast.error {
+            border-color: rgba(239, 68, 68, 0.5);
+            background: rgba(254, 242, 242, 0.98);
+        }
+
+        .toast.info {
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(239, 246, 255, 0.98);
+        }
+
+        .toast-icon {
+            font-size: 1.6em;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+        }
+
+        .toast-content {
+            flex: 1;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 4px;
+            font-size: 0.95em;
+        }
+
+        .toast-message {
+            font-size: 0.85em;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-icon">🎁</div>
+                <div class="modal-title">Bevestig je klik</div>
+            </div>
+            <div class="modal-text" id="modalText"></div>
+            <div class="modal-buttons">
+                <button class="secondary" onclick="closeModal()">Annuleren</button>
+                <button class="primary" onclick="confirmClick()">Ja, bevestigen</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <img src="/kado.png" alt="Cadeau" class="kado-icon">
+        <h1>Lootje Herinnering</h1>
+        <p class="subtitle" id="eventName">Laden...</p>
+
+        <div id="loadingScreen" class="screen active">
+            <div style="text-align: center; padding: 40px 0;">
+                <div style="font-size: 3em; margin-bottom: 16px;">⏳</div>
+                <p style="color: #666;">Laden...</p>
+            </div>
+        </div>
+
+        <div id="errorScreen" class="screen">
+            <div class="error" id="errorMessage">
+                Sessie niet gevonden
+            </div>
+        </div>
+
+        <div id="mainScreen" class="screen">
+            <div class="info">
+                🔒 Klik op de naam die <strong>jij getrokken hebt</strong>. Je kunt maar 1 keer klikken, dus kies zorgvuldig!
+            </div>
+
+            <div class="progress-box">
+                <div class="progress-text" id="progressCount">0 / 0</div>
+                <div class="progress-label">personen hebben bevestigd</div>
+            </div>
+
+            <div id="participantsList" class="participants-grid"></div>
+        </div>
+
+        <div id="thankYouScreen" class="screen">
+            <div class="success">
+                ✅ Bedankt voor je bevestiging!
+            </div>
+            <div class="info">
+                Je klik is geregistreerd. Als iedereen heeft geklikt wordt er automatisch een email verstuurd naar degene die het vergeten is.
+            </div>
+        </div>
+
+        <div id="completedScreen" class="screen">
+            <div class="success">
+                🎉 Recovery voltooid!
+            </div>
+            <div class="info">
+                De email is verstuurd naar de persoon die het vergeten was. Het geheim is bewaard gebleven!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let recoveryUrl = null;
+        let sessionData = null;
+        let selectedName = null;
+        let socket = null;
+        let hasClicked = false;
+
+        window.addEventListener('load', init);
+
+        function init() {
+            const pathParts = window.location.pathname.split('/');
+            if (pathParts[1] === 'recovery' && pathParts[2]) {
+                recoveryUrl = pathParts[2];
+            }
+
+            if (!recoveryUrl) {
+                showError('Ongeldige recovery link');
+                return;
+            }
+
+            initializeSocket();
+            loadRecoverySession();
+        }
+
+        function initializeSocket() {
+            socket = io();
+
+            socket.on('connect', () => {
+                console.log('Connected to server');
+                if (recoveryUrl) {
+                    socket.emit('join-recovery', recoveryUrl);
+                }
+            });
+
+            socket.on('recovery-click', (data) => {
+                console.log('Recovery click:', data);
+                updateProgress(data.clickCount, data.totalParticipants);
+                showToast('Update', 'Iemand heeft geklikt', 'info');
+            });
+
+            socket.on('recovery-completed', (data) => {
+                console.log('Recovery completed:', data);
+                updateProgress(data.clickCount, data.totalParticipants);
+                showScreen('completedScreen');
+                showToast('Voltooid', 'Email is verstuurd!', 'success');
+            });
+        }
+
+        async function loadRecoverySession() {
+            try {
+                const response = await fetch(`/api/recovery/${recoveryUrl}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    showError(data.message || 'Sessie niet gevonden');
+                    return;
+                }
+
+                sessionData = data;
+                document.getElementById('eventName').textContent = data.eventName;
+
+                if (data.emailSent) {
+                    showScreen('completedScreen');
+                } else {
+                    displayParticipants(data.participants);
+                    updateProgress(data.clickCount, data.totalParticipants);
+                    showScreen('mainScreen');
+                }
+            } catch (err) {
+                console.error('Error loading recovery session:', err);
+                showError('Kon sessie niet laden');
+            }
+        }
+
+        function displayParticipants(participants) {
+            const list = document.getElementById('participantsList');
+            list.innerHTML = participants.map(name => `
+                <div class="participant-card" onclick="selectParticipant('${escapeJs(name)}')">
+                    <div class="participant-icon">👤</div>
+                    <div class="participant-name">${escapeHtml(name)}</div>
+                </div>
+            `).join('');
+        }
+
+        function updateProgress(clickCount, totalParticipants) {
+            document.getElementById('progressCount').textContent = `${clickCount} / ${totalParticipants}`;
+        }
+
+        function selectParticipant(name) {
+            if (hasClicked) {
+                showToast('Let op', 'Je hebt al geklikt', 'info');
+                return;
+            }
+
+            selectedName = name;
+            document.getElementById('modalText').textContent =
+                `Je klikt op "${name}". Dit betekent dat jij deze persoon hebt geloot. Weet je het zeker? Je kunt maar 1 keer klikken!`;
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('confirmModal').classList.remove('active');
+            selectedName = null;
+        }
+
+        async function confirmClick() {
+            const nameToClick = selectedName;
+            closeModal();
+
+            if (!nameToClick) return;
+
+            try {
+                const response = await fetch('/api/recovery/click', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        recoveryUrl: recoveryUrl,
+                        recipientName: nameToClick
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    hasClicked = true;
+                    updateProgress(data.clickCount, data.totalParticipants);
+
+                    if (data.emailSent) {
+                        showScreen('completedScreen');
+                        showToast('Voltooid', data.message, 'success');
+                    } else {
+                        showScreen('thankYouScreen');
+                        showToast('Bedankt', data.message, 'success');
+                    }
+                } else {
+                    showToast('Fout', data.error || data.message, 'error');
+                }
+            } catch (err) {
+                console.error('Error clicking:', err);
+                showToast('Fout', 'Kon klik niet registreren', 'error');
+            }
+        }
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            showScreen('errorScreen');
+        }
+
+        function showToast(title, message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+
+            const icons = {
+                success: '✅',
+                error: '❌',
+                info: 'ℹ️'
+            };
+
+            toast.innerHTML = `
+                <div class="toast-icon">${icons[type] || icons.info}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${escapeHtml(title)}</div>
+                    <div class="toast-message">${escapeHtml(message)}</div>
+                </div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function escapeJs(text) {
+            return text.replace(/'/g, "\\'").replace(/"/g, '\\"');
+        }
+    </script>
+</body>
+</html>

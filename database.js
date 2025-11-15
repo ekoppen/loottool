@@ -34,10 +34,32 @@ function initializeDatabase() {
             UNIQUE(lottery_id, name)
         );
 
+        CREATE TABLE IF NOT EXISTS recovery_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recovery_url TEXT UNIQUE NOT NULL,
+            lottery_id INTEGER NOT NULL,
+            recovery_email TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            email_sent INTEGER DEFAULT 0,
+            email_sent_at TEXT,
+            FOREIGN KEY (lottery_id) REFERENCES lottery(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS recovery_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recovery_session_id INTEGER NOT NULL,
+            clicked_recipient_name TEXT NOT NULL,
+            clicked_at TEXT NOT NULL,
+            FOREIGN KEY (recovery_session_id) REFERENCES recovery_sessions(id) ON DELETE CASCADE,
+            UNIQUE(recovery_session_id, clicked_recipient_name)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_lottery_event_url ON lottery(event_url);
         CREATE INDEX IF NOT EXISTS idx_lottery_active ON lottery(active);
         CREATE INDEX IF NOT EXISTS idx_participants_lottery ON participants(lottery_id);
         CREATE INDEX IF NOT EXISTS idx_participants_viewed ON participants(viewed);
+        CREATE INDEX IF NOT EXISTS idx_recovery_sessions_url ON recovery_sessions(recovery_url);
+        CREATE INDEX IF NOT EXISTS idx_recovery_clicks_session ON recovery_clicks(recovery_session_id);
     `);
 }
 
@@ -241,6 +263,169 @@ function getLotteryStatus(eventUrl = null) {
     };
 }
 
+// Recovery functions
+
+// Create recovery session
+function createRecoverySession(eventUrl, recoveryEmail) {
+    const lottery = getActiveLottery(eventUrl);
+
+    if (!lottery) {
+        return null;
+    }
+
+    const recoveryUrl = crypto.randomBytes(8).toString('hex');
+    const createdAt = new Date().toISOString();
+
+    const insert = db.prepare(`
+        INSERT INTO recovery_sessions (recovery_url, lottery_id, recovery_email, created_at)
+        VALUES (?, ?, ?, ?)
+    `);
+
+    insert.run(recoveryUrl, lottery.id, recoveryEmail, createdAt);
+
+    return recoveryUrl;
+}
+
+// Get recovery session
+function getRecoverySession(recoveryUrl) {
+    const session = db.prepare(`
+        SELECT rs.*, l.event_name, l.event_url
+        FROM recovery_sessions rs
+        JOIN lottery l ON rs.lottery_id = l.id
+        WHERE rs.recovery_url = ?
+    `).get(recoveryUrl);
+
+    if (!session) {
+        return null;
+    }
+
+    // Get all participants for this lottery
+    const participants = getParticipants(session.lottery_id);
+
+    // Get all clicked names
+    const clicks = db.prepare(`
+        SELECT clicked_recipient_name
+        FROM recovery_clicks
+        WHERE recovery_session_id = ?
+    `).all(session.id);
+
+    const clickedNames = clicks.map(c => c.clicked_recipient_name);
+
+    return {
+        sessionId: session.id,
+        eventName: session.event_name,
+        eventUrl: session.event_url,
+        recoveryEmail: session.recovery_email,
+        participants: participants.map(p => p.name),
+        clickedNames: clickedNames,
+        totalParticipants: participants.length,
+        clickCount: clickedNames.length,
+        emailSent: session.email_sent === 1
+    };
+}
+
+// Register a click on a recipient name
+function registerRecoveryClick(recoveryUrl, recipientName) {
+    const session = getRecoverySession(recoveryUrl);
+
+    if (!session) {
+        return { success: false, error: 'Recovery sessie niet gevonden' };
+    }
+
+    if (session.emailSent) {
+        return { success: false, error: 'Recovery is al afgerond' };
+    }
+
+    // Check if this name exists in participants
+    if (!session.participants.includes(recipientName)) {
+        return { success: false, error: 'Naam niet gevonden' };
+    }
+
+    // Check if already clicked
+    if (session.clickedNames.includes(recipientName)) {
+        return { success: false, error: 'Deze naam is al aangeklikt' };
+    }
+
+    const clickedAt = new Date().toISOString();
+
+    try {
+        db.prepare(`
+            INSERT INTO recovery_clicks (recovery_session_id, clicked_recipient_name, clicked_at)
+            VALUES (?, ?, ?)
+        `).run(session.sessionId, recipientName, clickedAt);
+
+        const newClickCount = session.clickCount + 1;
+        const totalParticipants = session.totalParticipants;
+
+        // Check if we have N-1 clicks (only one person left)
+        if (newClickCount === totalParticipants - 1) {
+            // Find the missing name
+            const missingName = session.participants.find(name => !session.clickedNames.includes(name) && name !== recipientName);
+
+            return {
+                success: true,
+                clickCount: newClickCount,
+                totalParticipants: totalParticipants,
+                shouldSendEmail: true,
+                missingName: missingName,
+                recoveryEmail: session.recoveryEmail,
+                sessionId: session.sessionId
+            };
+        }
+
+        return {
+            success: true,
+            clickCount: newClickCount,
+            totalParticipants: totalParticipants,
+            shouldSendEmail: false
+        };
+    } catch (error) {
+        return { success: false, error: 'Database fout: ' + error.message };
+    }
+}
+
+// Mark recovery email as sent
+function markRecoveryEmailSent(sessionId) {
+    const emailSentAt = new Date().toISOString();
+
+    db.prepare(`
+        UPDATE recovery_sessions
+        SET email_sent = 1, email_sent_at = ?
+        WHERE id = ?
+    `).run(emailSentAt, sessionId);
+}
+
+// Get recovery sessions for an event (for admin)
+function getRecoverySessionsForEvent(eventUrl) {
+    const lottery = getActiveLottery(eventUrl);
+
+    if (!lottery) {
+        return [];
+    }
+
+    const sessions = db.prepare(`
+        SELECT recovery_url, recovery_email, created_at, email_sent
+        FROM recovery_sessions
+        WHERE lottery_id = ?
+        ORDER BY created_at DESC
+    `).all(lottery.id);
+
+    return sessions.map(session => {
+        const clicks = db.prepare(`
+            SELECT COUNT(*) as count
+            FROM recovery_clicks
+            WHERE recovery_session_id = (
+                SELECT id FROM recovery_sessions WHERE recovery_url = ?
+            )
+        `).get(session.recovery_url);
+
+        return {
+            ...session,
+            clickCount: clicks.count
+        };
+    });
+}
+
 module.exports = {
     db,
     getLotteryData,
@@ -249,5 +434,10 @@ module.exports = {
     getAssignment,
     deleteLottery,
     getLotteryStatus,
-    verifyAdmin
+    verifyAdmin,
+    createRecoverySession,
+    getRecoverySession,
+    registerRecoveryClick,
+    markRecoveryEmailSent,
+    getRecoverySessionsForEvent
 };

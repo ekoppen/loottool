@@ -88,6 +88,53 @@ async function sendAdminCredentialsEmail(email, eventName, eventUrl, username, p
     }
 }
 
+// Function to send recovery email
+async function sendRecoveryEmail(email, eventName, recipientName) {
+    if (!emailTransporter) {
+        console.log('Recovery email not sent - transporter not configured');
+        return false;
+    }
+
+    const mailOptions = {
+        from: process.env.GMAIL_USER,
+        to: email,
+        subject: `Je Sinterklaas Lootje - ${eventName}`,
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h1 style="color: #c41e3a;">🎁 Sinterklaas Lootjes</h1>
+                <h2>Je lootje herinnering</h2>
+                <p>Hallo!</p>
+                <p>Je vroeg om een herinnering voor de loting "<strong>${eventName}</strong>".</p>
+
+                <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                    <h3 style="margin-top: 0; color: #856404;">Je hebt geloot voor:</h3>
+                    <p style="font-size: 24px; font-weight: bold; color: #856404; margin: 10px 0;">
+                        ${recipientName}
+                    </p>
+                </div>
+
+                <p style="color: #666; font-size: 14px;">
+                    Veel plezier met het uitzoeken van een leuk cadeau! 🎁
+                </p>
+
+                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+                <p style="color: #999; font-size: 12px;">
+                    Dit is een automatisch gegenereerde email van Sinterklaas Lootjes.
+                </p>
+            </div>
+        `
+    };
+
+    try {
+        await emailTransporter.sendMail(mailOptions);
+        console.log(`📧 Recovery email sent to ${email} with recipient: ${recipientName}`);
+        return true;
+    } catch (error) {
+        console.error('Failed to send recovery email:', error);
+        return false;
+    }
+}
+
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
@@ -99,6 +146,11 @@ app.get('/event/:eventUrl', (req, res) => {
 // Route for admin URLs - serve admin.html with event context
 app.get('/admin/:eventUrl', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Route for recovery URLs - serve recovery.html
+app.get('/recovery/:recoveryUrl', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'recovery.html'));
 });
 
 // Socket.IO connection handling
@@ -115,6 +167,12 @@ io.on('connection', (socket) => {
     socket.on('join-admin', () => {
         socket.join('admin');
         console.log(`Socket ${socket.id} joined admin room`);
+    });
+
+    // Join recovery room
+    socket.on('join-recovery', (recoveryUrl) => {
+        socket.join(`recovery:${recoveryUrl}`);
+        console.log(`Socket ${socket.id} joined recovery: ${recoveryUrl}`);
     });
 
     socket.on('disconnect', () => {
@@ -309,6 +367,135 @@ app.get('/api/status', async (req, res) => {
     const eventUrl = req.query.eventUrl;
     const status = db.getLotteryStatus(eventUrl);
     res.json(status);
+});
+
+// Recovery: Create recovery session (admin only)
+app.post('/api/recovery/create', async (req, res) => {
+    const { eventUrl, username, password, recoveryEmail } = req.body;
+
+    if (!eventUrl || !username || !password || !recoveryEmail) {
+        return res.status(400).json({ success: false, message: 'Alle velden zijn verplicht' });
+    }
+
+    // Verify admin credentials
+    const isValid = db.verifyAdmin(eventUrl, username, password);
+    if (!isValid) {
+        return res.status(401).json({ success: false, message: 'Ongeldige inloggegevens' });
+    }
+
+    // Create recovery session
+    const recoveryUrl = db.createRecoverySession(eventUrl, recoveryEmail);
+
+    if (!recoveryUrl) {
+        return res.status(404).json({ success: false, message: 'Event niet gevonden' });
+    }
+
+    const fullRecoveryUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/recovery/${recoveryUrl}`;
+
+    res.json({
+        success: true,
+        message: 'Recovery sessie aangemaakt',
+        recoveryUrl: recoveryUrl,
+        fullUrl: fullRecoveryUrl
+    });
+});
+
+// Recovery: Get recovery session data
+app.get('/api/recovery/:recoveryUrl', async (req, res) => {
+    const { recoveryUrl } = req.params;
+
+    const session = db.getRecoverySession(recoveryUrl);
+
+    if (!session) {
+        return res.status(404).json({ success: false, message: 'Recovery sessie niet gevonden' });
+    }
+
+    // Return data without revealing which names were clicked
+    res.json({
+        success: true,
+        eventName: session.eventName,
+        participants: session.participants,
+        clickCount: session.clickCount,
+        totalParticipants: session.totalParticipants,
+        emailSent: session.emailSent
+    });
+});
+
+// Recovery: Register a click
+app.post('/api/recovery/click', async (req, res) => {
+    const { recoveryUrl, recipientName } = req.body;
+
+    if (!recoveryUrl || !recipientName) {
+        return res.status(400).json({ success: false, message: 'Ongeldige aanvraag' });
+    }
+
+    const result = db.registerRecoveryClick(recoveryUrl, recipientName);
+
+    if (!result.success) {
+        return res.status(400).json(result);
+    }
+
+    // If we should send email (N-1 clicks reached)
+    if (result.shouldSendEmail) {
+        try {
+            const session = db.getRecoverySession(recoveryUrl);
+            await sendRecoveryEmail(result.recoveryEmail, session.eventName, result.missingName);
+            db.markRecoveryEmailSent(result.sessionId);
+
+            // Broadcast to all clients in recovery room
+            io.to(`recovery:${recoveryUrl}`).emit('recovery-completed', {
+                clickCount: result.clickCount,
+                totalParticipants: result.totalParticipants
+            });
+
+            return res.json({
+                success: true,
+                message: 'Bedankt! Email is verstuurd naar de persoon die het vergeten was.',
+                clickCount: result.clickCount,
+                totalParticipants: result.totalParticipants,
+                emailSent: true
+            });
+        } catch (error) {
+            console.error('Failed to send recovery email:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Kon email niet versturen'
+            });
+        }
+    }
+
+    // Broadcast update to all clients in recovery room
+    io.to(`recovery:${recoveryUrl}`).emit('recovery-click', {
+        clickCount: result.clickCount,
+        totalParticipants: result.totalParticipants
+    });
+
+    res.json({
+        success: true,
+        message: 'Bedankt voor je klik!',
+        clickCount: result.clickCount,
+        totalParticipants: result.totalParticipants,
+        emailSent: false
+    });
+});
+
+// Recovery: Get recovery sessions for an event (admin only)
+app.get('/api/recovery/sessions/:eventUrl', async (req, res) => {
+    const { eventUrl } = req.params;
+    const { username, password } = req.query;
+
+    if (!username || !password) {
+        return res.status(401).json({ success: false, message: 'Authenticatie vereist' });
+    }
+
+    // Verify admin credentials
+    const isValid = db.verifyAdmin(eventUrl, username, password);
+    if (!isValid) {
+        return res.status(401).json({ success: false, message: 'Ongeldige inloggegevens' });
+    }
+
+    const sessions = db.getRecoverySessionsForEvent(eventUrl);
+    res.json({ success: true, sessions });
 });
 
 // Create assignments algorithm
