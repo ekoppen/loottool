@@ -33,12 +33,16 @@ body {
     padding: 56px 14px 40px;
     font: 400 1rem/1.55 var(--body);
     color: var(--ink);
-    background-color: var(--night);
+    background-color: #0d1340;
+    /* sterren (boven) op een donkere waas: lichter blauw bovenin, diep marineblauw onderin en aan de randen */
     background-image:
         radial-gradient(#ffd166 1.6px, transparent 2.4px),
-        radial-gradient(rgba(255, 255, 255, .75) 1.2px, transparent 2px);
-    background-size: 83px 83px, 127px 127px;
-    background-position: 0 0, 41px 29px;
+        radial-gradient(rgba(255, 255, 255, .75) 1.2px, transparent 2px),
+        radial-gradient(ellipse 130% 90% at 50% 0%, #2b3894 0%, #1d2866 38%, #0d1340 100%);
+    background-size: 83px 83px, 127px 127px, 100% 100%;
+    background-position: 0 0, 41px 29px, 0 0;
+    background-repeat: repeat, repeat, no-repeat;
+    background-attachment: scroll, scroll, fixed;
 }
 
 /* --- Thema's per loting (body[data-theme]) en achtergrondfoto (body.has-photo) --- */
@@ -46,7 +50,7 @@ body[data-theme='dennen'] { --accent: #2e9e5b; --accent-dark: #1f6b3e; }
 body[data-theme='nacht'] { --accent: #3a6ff0; --accent-dark: #2448a8; }
 body[data-theme='pepernoot'] { --accent: #c0762f; --accent-dark: #85501d; }
 body[data-theme='pruim'] { --accent: #9b3fb5; --accent-dark: #6c2680; }
-body.has-photo::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(rgba(20, 26, 70, .5), rgba(20, 26, 70, .5)), var(--photo) center / cover no-repeat; }
+body.has-photo::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(rgba(20, 26, 70, .35), rgba(8, 12, 44, .8)), var(--photo) center / cover no-repeat; }
 
 /* --- Pakket --- */
 .sheet {
