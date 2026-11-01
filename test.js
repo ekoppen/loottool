@@ -122,6 +122,11 @@ test('hele flow: aanmaken, trekken, herstel en verwijderen', async t => {
     assert.deepEqual(status.viewedBy, ['Anna']);
     assert.equal((await post('/api/draw', { name: 'Niemand', eventUrl })).status, 404);
 
+    // een tweede keer trekken geeft het lootje niet nog eens prijs
+    const again = await post('/api/draw', { name: 'Anna', eventUrl });
+    assert.equal(again.status, 409);
+    assert.equal(again.recipient, undefined);
+
     // herstel: zonder mailconfiguratie weigert de server netjes
     const rec = await post('/api/recovery/create', { eventUrl, ...admin, recoveryEmail: 'a@b.nl' });
     assert.equal(rec.status, 503);

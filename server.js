@@ -24,8 +24,20 @@ const emailTransporter = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWOR
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// Begrenst uitgaande mail zodat de server geen mailrelay wordt: max. 30 per uur in totaal en 3 per adres.
+// ponytail: in het geheugen, werkt voor één serverinstantie.
+const sentMail = [];
+function mailAllowed(to) {
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    while (sentMail.length && sentMail[0].at < cutoff) sentMail.shift();
+    const addr = to.toLowerCase();
+    if (sentMail.length >= 30 || sentMail.filter(m => m.to === addr).length >= 3) return false;
+    sentMail.push({ to: addr, at: Date.now() });
+    return true;
+}
+
 async function sendMail(to, subject, html) {
-    if (!emailTransporter) return false;
+    if (!emailTransporter || !mailAllowed(to)) return false;
     try {
         await emailTransporter.sendMail({ from: process.env.GMAIL_USER, to, subject, html });
         return true;
@@ -43,19 +55,20 @@ const mailFrame = body => `
         <p style="color: #8a7a68; font-size: 12px;">Automatisch bericht van Sinterklaas Lootjes.</p>
     </div>`;
 
-function sendAdminCredentialsEmail(email, eventName, eventUrl, username, password) {
+// Onderwerp is vast en het wachtwoord staat er bewust niet in: de maker kent het al.
+function sendAdminCredentialsEmail(email, eventName, eventUrl, username) {
     const adminUrl = `${baseUrl()}/admin/${eventUrl}`;
     const participantUrl = `${baseUrl()}/event/${eventUrl}`;
-    return sendMail(email, `Je Sinterklaas Lootjes - ${eventName}`, mailFrame(`
+    return sendMail(email, 'Je Sinterklaas Lootjes-loting staat klaar', mailFrame(`
         <h2>Je loting "${esc(eventName)}" staat klaar</h2>
-        <p><strong>Gebruikersnaam:</strong> ${esc(username)}<br><strong>Wachtwoord:</strong> ${esc(password)}</p>
+        <p><strong>Gebruikersnaam:</strong> ${esc(username)}<br>Het wachtwoord is het wachtwoord dat je zelf hebt gekozen.</p>
         <p><strong>Beheerlink:</strong><br><a href="${esc(adminUrl)}">${esc(adminUrl)}</a></p>
         <p><strong>Link voor deelnemers:</strong><br><a href="${esc(participantUrl)}">${esc(participantUrl)}</a></p>
         <p style="color: #8a7a68;">Bewaar deze mail: je hebt de gegevens nodig om je loting te beheren.</p>`));
 }
 
 function sendRecoveryEmail(email, eventName, recipientName) {
-    return sendMail(email, `Je Sinterklaas lootje - ${eventName}`, mailFrame(`
+    return sendMail(email, 'Je Sinterklaas lootje', mailFrame(`
         <h2>Je lootje van "${esc(eventName)}"</h2>
         <p>Jij mag een surprise maken voor:</p>
         <p style="font-size: 26px; font-weight: bold; color: #b11e2d;">${esc(recipientName)}</p>
@@ -164,7 +177,7 @@ app.post('/api/admin/create', strict, wrap(async (req, res) => {
 
     let mailed = false;
     if (adminEmail && adminEmail.trim()) {
-        mailed = await sendAdminCredentialsEmail(adminEmail.trim(), eventName, eventUrl, adminUsername, adminPassword);
+        mailed = await sendAdminCredentialsEmail(adminEmail.trim(), eventName, eventUrl, adminUsername);
     }
 
     res.json({
@@ -197,6 +210,9 @@ app.post('/api/draw', rateLimit(120), wrap(async (req, res) => {
             ? 'Deze naam staat niet in de lijst. Controleer de spelling.'
             : 'Deze loting bestaat niet (meer). Neem contact op met de organisator.');
     }
+
+    // Eén keer trekken: daarna geeft de server het lootje niet meer prijs (herstel loopt via de herstelflow).
+    if (assignment.viewed) return fail(res, 409, 'Dit lootje is al getrokken. Is het kwijt? Vraag de organisator om een herstellink.');
 
     if (await store.markAsViewed(assignment)) {
         const status = await store.getLotteryStatus(eventUrl);
