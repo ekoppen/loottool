@@ -33,9 +33,9 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 // Aanmaakmail en resetmail kan iedereen veroorzaken; samen krijgen ze maximaal 20 van de 40, zodat de
 // herstelmail altijd ruimte houdt. Per soort geldt verder 3 per adres en 5 per IP.
 // ponytail: in het geheugen, werkt voor één serverinstantie.
-const OPEN_KINDS = ['create', 'reset'];
+const OPEN_KINDS = ['create', 'reset', 'account'];
 const OPEN_CAP = 20;
-const MAIL_KIND_CAP = { create: 20, recovery: 30, reset: 20 };
+const MAIL_KIND_CAP = { create: 20, recovery: 30, reset: 20, account: 20 };
 const sentMail = [];
 function mailAllowed(kind, to, ip) {
     const cutoff = Date.now() - 60 * 60 * 1000;
@@ -85,6 +85,15 @@ function sendLotteryReadyEmail(email, eventName, eventUrl, ip) {
         <p><strong>Beheerlink (alleen voor jou):</strong><br><a href="${esc(adminUrl)}">${esc(adminUrl)}</a></p>
         <p><strong>Link voor deelnemers:</strong><br><a href="${esc(participantUrl)}">${esc(participantUrl)}</a></p>
         <p style="color: #8a7a68;">Log in met je account om de loting te beheren.</p>`), ip);
+}
+
+// Melding naar het opgegeven adres: iedereen kan een adres intypen, dus de eigenaar moet het kunnen merken.
+function sendAccountCreatedEmail(email) {
+    return sendMail('account', email, 'Je account bij Sinterklaas Lootjes', mailFrame(`
+        <h2>Je account is aangemaakt</h2>
+        <p>Met dit e-mailadres is een account gemaakt bij Sinterklaas Lootjes, om een lootje te bewaren. Je ziet het terug via
+        <a href="${esc(baseUrl())}/mijn-lootjes">${esc(baseUrl())}/mijn-lootjes</a>.</p>
+        <p style="color: #8a7a68;">Was jij dit niet? Dan heeft iemand dit adres gebruikt. Kies via "Wachtwoord vergeten" op de loginpagina een eigen wachtwoord, dan heb jij het account in handen.</p>`));
 }
 
 function sendPasswordResetEmail(email, name, resetUrl) {
@@ -141,6 +150,7 @@ app.get('/event/:eventUrl', page('index.html'));
 app.get('/admin/:eventUrl', page('admin.html'));
 app.get('/recovery/:recoveryUrl', page('recovery.html'));
 app.get('/nieuw-wachtwoord', page('reset.html'));
+app.get('/mijn-lootjes', page('mijn.html'));
 
 io.on('connection', socket => {
     socket.on('join-event', code => isCode(code) && socket.join(`event:${code}`));
@@ -366,10 +376,63 @@ app.post('/api/draw', rateLimit(120), wrap(async (req, res) => {
             name: assignment.giver, viewedBy: status.viewedBy, viewedCount: status.viewedCount
         });
 
-        res.json({ success: true, giver: assignment.giver, recipient: assignment.recipient, family: assignment.family });
+        // Bewijs dat deze browser het lootje net zag: daarmee kan de deelnemer het aan een account koppelen (een uur geldig).
+        const claimToken = auth.signToken({ p: 'claim', e: eventUrl, n: assignment.giver }, 60 * 60);
+        res.json({ success: true, giver: assignment.giver, recipient: assignment.recipient, family: assignment.family, claimToken });
     } finally {
         drawing.delete(key);
     }
+}));
+
+// --- Lootje bewaren in een account ---
+// Koppelt het zojuist getrokken lootje aan een account: het ingelogde account, of een nieuw account met e-mail en
+// (niet verplicht) wachtwoord. Zonder wachtwoord kiest de gebruiker er via een mail zelf een. De koppeling hangt aan
+// de claim-token (wie het lootje net zag), niet aan het e-mailadres, zodat niemand een adres vooraf kan claimen.
+app.post('/api/me/claim', strict, wrap(async (req, res) => {
+    const claim = auth.verifyToken(req.body.claimToken, 'claim');
+    if (!claim || !isCode(claim.e) || typeof claim.n !== 'string') {
+        return fail(res, 400, 'Deze koppeling is verlopen. Je kunt het lootje helaas niet meer bewaren.');
+    }
+    const assignment = await store.getAssignment(claim.e, claim.n);
+    if (!assignment) return fail(res, 404, 'Deze loting bestaat niet meer.');
+
+    let user = auth.userFrom(req);
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+
+    if (!user) {
+        if (!isEmail(email)) return fail(res, 400, 'Vul een geldig e-mailadres in');
+        if (password && (password.length < 8 || password.length > 200)) return fail(res, 400, 'Kies een wachtwoord van minimaal 8 tekens, of laat het leeg');
+    }
+    // Eerst controleren, dan pas een account maken.
+    if (assignment.row.gebruikerId && (!user || assignment.row.gebruikerId !== user.id)) {
+        return fail(res, 409, 'Dit lootje is al aan een account gekoppeld.');
+    }
+
+    let mailRequested = false;
+    if (!user) {
+        try {
+            user = await auth.registerUser(email, password || undefined);
+        } catch (err) {
+            if (err.duplicate) return fail(res, 409, 'Er is al een account met dit e-mailadres. Log in om je lootje te koppelen.');
+            throw err;
+        }
+    }
+    const linked = await store.linkParticipant(assignment, user.id);
+    if (linked === 'taken') return fail(res, 409, 'Dit lootje is al aan een account gekoppeld.');
+
+    const created = !auth.userFrom(req);
+    if (created && password) {
+        auth.setSession(res, user); // je koos zelf een wachtwoord: meteen ingelogd
+        sendAccountCreatedEmail(user.email).catch(() => {});
+    } else if (created) {
+        try { await auth.requestPasswordReset(user.email); mailRequested = true; } catch (err) { console.error('Resetmail aanvragen mislukt:', err.message); }
+    }
+    res.json({ success: true, loggedIn: !created || !!password, mailRequested, email: user.email });
+}));
+
+app.get('/api/me/lots', needUser, wrap(async (req, res) => {
+    res.json({ success: true, lots: await store.listLotsFor(req.user.id) });
 }));
 
 app.get('/api/status', wrap(async (req, res) => {

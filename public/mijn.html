@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Mijn lootjes - Sinterklaas Lootjes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Fraunces:ital,wght@0,700;0,800;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <main class="sheet">
+        <header class="brand">
+            <img src="/sint.png" alt="">
+            <div>
+                <h1><a href="/">Sinterklaas Lootjes</a></h1>
+                <p>Mijn lootjes</p>
+            </div>
+        </header>
+
+        <div id="account" class="account hidden">
+            <span id="accountEmail"></span>
+            <button id="logoutBtn" class="link" type="button">Uitloggen</button>
+        </div>
+
+        <section id="loadingScreen" class="screen"><p class="lead">Even laden…</p></section>
+
+        <section id="loginScreen" class="screen hidden">
+            <h2>Log in om je lootjes te zien</h2>
+            <p class="lead">Heb je een lootje bewaard met je e-mailadres? Log in en je ziet terug wie je trok.</p>
+            <button id="loginBtn" class="btn btn-block" type="button">Inloggen</button>
+            <p class="footer">Nog geen account? Trek eerst je lootje via de link van de organisator. Daarna kun je het bewaren.</p>
+        </section>
+
+        <section id="listScreen" class="screen hidden">
+            <h2>Wie je trok</h2>
+            <ul id="lots" class="people"></ul>
+            <p id="noLots" class="lead hidden">Je hebt nog geen lootjes bewaard. Trek je lootje via de link van de organisator en kies daarna "Bewaar je lootje".</p>
+            <p class="footer">Organiseer je zelf een loting? <a class="link" href="/admin.html">Naar je lotingen</a></p>
+        </section>
+    </main>
+
+    <script src="/common.js"></script>
+    <script>
+        async function claimPending() {
+            let token = null;
+            try { token = sessionStorage.getItem(CLAIM_STORAGE_KEY); sessionStorage.removeItem(CLAIM_STORAGE_KEY); } catch { /* geen opslag */ }
+            if (!token) return;
+            const data = await api('/api/me/claim', { claimToken: token });
+            if (data.success) toast('Lootje bewaard', 'Het staat nu in je lijst.', 'success');
+            else toast('Bewaren lukt niet', data.message, 'error');
+        }
+
+        async function showLots() {
+            const data = await api('/api/me/lots');
+            if (!data.success) return showScreen('loginScreen');
+            $('lots').innerHTML = data.lots.map(l => `
+                <li><span class="who"><span>${esc(l.eventName)}<small style="display: block; color: var(--muted); font-weight: 400">${l.created ? new Date(l.created).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</small></span></span>
+                <span class="chip" title="Jij trok">${esc(l.giver)} → <b>${esc(l.recipient)}</b></span></li>`).join('');
+            $('noLots').classList.toggle('hidden', data.lots.length > 0);
+            showScreen('listScreen');
+        }
+
+        $('loginBtn').onclick = () => startLogin('/mijn-lootjes');
+        $('logoutBtn').onclick = async () => { await api('/api/auth/logout', {}); location.href = '/mijn-lootjes'; };
+
+        (async function init() {
+            const me = await api('/api/auth/me');
+            if (!me.loggedIn) return showScreen('loginScreen');
+            $('accountEmail').textContent = me.email;
+            $('account').classList.remove('hidden');
+            await claimPending();
+            await showLots();
+        })();
+    </script>
+</body>
+</html>

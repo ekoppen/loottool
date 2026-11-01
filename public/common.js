@@ -83,3 +83,37 @@ function applyDesign(design) {
     document.body.classList.toggle('has-photo', !!photo);
     document.body.style.setProperty('--photo', photo ? `url("${encodeURI(photo)}")` : 'none');
 }
+
+// --- Inloggen met Apenkaas (authorization code met PKCE), gedeeld door beheer en "Mijn lootjes" ---
+const LOGIN_STORAGE_KEY = 'lootjes-login';
+const CLAIM_STORAGE_KEY = 'lootjes-claim'; // claim-token van een lootje dat na het inloggen gekoppeld moet worden
+const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const randomString = n => b64url(crypto.getRandomValues(new Uint8Array(n)));
+
+// Stuurt door naar de loginpagina; na het inloggen komt de gebruiker terug op returnTo.
+async function startLogin(returnTo) {
+    const cfg = await api('/api/auth/config');
+    if (!cfg.loginUrl) return toast('Inloggen is nog niet ingesteld', '', 'error');
+    const verifier = randomString(48);
+    const state = randomString(16);
+    const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+    try { sessionStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify({ verifier, state, returnTo })); } catch { return toast('Inloggen lukt niet in deze browser', 'Zet cookies en site-opslag aan.', 'error'); }
+    location.href = `${cfg.loginUrl}?redirect_uri=${encodeURIComponent(cfg.redirectUri)}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`;
+}
+
+// Terug van de loginpagina op /auth/callback: code inwisselen. Geeft het pad terug waar de gebruiker heen moet.
+async function finishLogin() {
+    const params = new URLSearchParams(location.search);
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(LOGIN_STORAGE_KEY)); sessionStorage.removeItem(LOGIN_STORAGE_KEY); } catch { /* geen opslag */ }
+    let target = '/admin.html';
+    if (saved && params.get('state') === saved.state && params.get('code')) {
+        const data = await api('/api/auth/callback', { code: params.get('code'), verifier: saved.verifier });
+        if (data.success) target = saved.returnTo || target;
+        else toast('Inloggen mislukt', data.message, 'error');
+    } else {
+        toast('Inloggen mislukt', 'De inlogpoging klopte niet meer. Probeer het nog eens.', 'error');
+    }
+    history.replaceState({}, '', target);
+    return target;
+}

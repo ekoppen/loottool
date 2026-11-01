@@ -57,6 +57,22 @@
                     <div class="name" id="recipientName"></div>
                 </div>
                 <div class="note" style="margin-top: 28px">Onthoud deze naam en vertel het aan niemand.</div>
+
+                <form id="saveForm" class="savecard stack hidden">
+                    <h3>Bewaar je lootje</h3>
+                    <p id="saveLead" class="lead">Maak een account met je e-mailadres, dan kun je later terugkijken wie je trok.</p>
+                    <div id="saveFields" class="stack">
+                        <div class="field"><label for="saveEmail">E-mailadres</label>
+                            <input id="saveEmail" type="email" autocomplete="email" required></div>
+                        <div class="field"><label for="savePassword">Wachtwoord (niet verplicht)</label>
+                            <input id="savePassword" type="password" autocomplete="new-password" minlength="8" maxlength="200">
+                            <small>Laat leeg om per mail zelf een wachtwoord te kiezen. Minimaal 8 tekens.</small></div>
+                    </div>
+                    <button class="btn btn-block" type="submit">Opslaan</button>
+                    <button id="saveSkip" class="btn btn-ghost btn-block" type="button">Overslaan</button>
+                    <p id="saveLoginHint" class="footer">Heb je al een account? <button id="saveLogin" class="link" type="button">Inloggen en koppelen</button></p>
+                </form>
+                <div id="saveDone" class="note note-ok hidden" style="margin-top: 16px"></div>
                 <div class="actions"><button id="backBtn" class="btn btn-ghost" type="button">Terug naar de lijst</button></div>
             </div>
         </section>
@@ -72,6 +88,7 @@
         let status = null;
         let selected = null;
         let drawing = false;
+        let claimToken = null;
 
         function renderTags() {
             const done = new Set(status.viewedBy.map(n => n.toLowerCase()));
@@ -113,6 +130,9 @@
 
             if (!status.viewedBy.includes(data.giver)) status.viewedBy.push(data.giver);
             renderTags();
+            claimToken = data.claimToken || null;
+            $('saveForm').classList.add('hidden');
+            $('saveDone').classList.add('hidden');
             $('giverLine').textContent = data.giver;
             $('recipientName').textContent = data.recipient;
             $('reveal').classList.add('hidden');
@@ -123,6 +143,30 @@
         $('parcel').addEventListener('click', () => {
             $('parcel').classList.add('hidden');
             $('reveal').classList.remove('hidden');
+            if (claimToken) $('saveForm').classList.remove('hidden'); // pas na het uitpakken: eerst het lootje zelf
+        });
+
+        // Lootje bewaren: account maken (of het ingelogde account gebruiken) en het lootje daaraan koppelen.
+        $('saveForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            const data = await api('/api/me/claim', { claimToken, email: $('saveEmail').value, password: $('savePassword').value });
+            if (!data.success) return toast('Bewaren lukt niet', data.message, 'error');
+            claimToken = null;
+            $('saveForm').classList.add('hidden');
+            $('savePassword').value = '';
+            $('saveDone').innerHTML = data.loggedIn
+                ? `Bewaard voor <b>${esc(data.email)}</b>. Je ziet je lootje terug onder <a class="link" href="/mijn-lootjes">Mijn lootjes</a>.`
+                : `Bewaard voor <b>${esc(data.email)}</b>. ${data.mailRequested ? 'We mailen je een link om een wachtwoord te kiezen. Daarna' : 'Kies via "Wachtwoord vergeten" een wachtwoord. Daarna'} zie je je lootje terug onder <a class="link" href="/mijn-lootjes">Mijn lootjes</a>.`;
+            $('saveDone').classList.remove('hidden');
+        });
+        $('saveSkip').addEventListener('click', () => {
+            claimToken = null;
+            $('saveForm').classList.add('hidden');
+        });
+        // Al een account: eerst inloggen; "Mijn lootjes" koppelt het lootje daarna met de bewaarde claim-token.
+        $('saveLogin').addEventListener('click', () => {
+            try { sessionStorage.setItem(CLAIM_STORAGE_KEY, claimToken); } catch { return toast('Inloggen lukt niet in deze browser', 'Zet site-opslag aan.', 'error'); }
+            startLogin('/mijn-lootjes');
         });
         $('backBtn').addEventListener('click', () => {
             $('recipientName').textContent = '';
@@ -139,6 +183,15 @@
                 }
             },
             'lottery-reset': () => { toast('Loting verwijderd', 'De organisator heeft deze loting gewist.'); loadStatus(); }
+        });
+
+        // Al ingelogd? Dan koppelen we het lootje aan dat account, zonder e-mail en wachtwoord te vragen.
+        api('/api/auth/me').then(me => {
+            if (!me.loggedIn) return;
+            $('saveFields').classList.add('hidden');
+            $('saveEmail').required = false;
+            $('saveLoginHint').classList.add('hidden');
+            $('saveLead').textContent = `Bewaar dit lootje in je account (${me.email}), dan zie je het later terug onder Mijn lootjes.`;
         });
 
         loadStatus();

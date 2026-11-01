@@ -94,6 +94,10 @@
         {
           "key": "bekekenOp",
           "type": "string"
+        },
+        {
+          "key": "gebruikerId",
+          "type": "string"
         }
       ],
       "createPermissions": [],

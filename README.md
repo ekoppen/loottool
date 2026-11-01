@@ -25,6 +25,10 @@ Online lootjes trekken voor familie, vrienden en collega's. Iedereen trekt zelf,
 
 De organisator kiest per loting een kleurthema (vijf), een welkomsttekst en een achtergrondfoto. De foto wordt in de browser verkleind (JPEG, zonder locatiegegevens), via de server in Apenkaas-opslag gezet en op de deelnemerspagina's getoond via de permanente publieke link van Apenkaas.
 
+## Lootje bewaren (Mijn lootjes)
+
+Na het uitpakken kan een deelnemer zijn lootje bewaren met een e-mailadres en (niet verplicht) wachtwoord, of door in te loggen met een bestaand account. Het lootje wordt gekoppeld via een korte, getekende claim-token die bij het trekken wordt meegegeven (een uur geldig), niet via het e-mailadres. Zonder wachtwoord krijgt de deelnemer een mail om er zelf een te kiezen. Op `/mijn-lootjes` ziet een ingelogde gebruiker wie hij of zij trok. Overslaan kan; later koppelen kan dan niet meer, omdat het lootje maar één keer wordt getoond.
+
 ## Tests
 
 `npm test` draait de verdeling en de hele flow tegen een nep-Apenkaas, zonder netwerk.

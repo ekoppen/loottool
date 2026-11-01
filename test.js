@@ -114,6 +114,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
         RATE_LIMIT_STRICT: '1000', APENKAAS_ACHTERGRONDEN_BUCKET_ID: 'bucket1', APENKAAS_APP_ID: 'app1', SESSION_SECRET: 'x'.repeat(40), BASE_URL: 'http://localhost:3000'
     });
     const store = require('./store');
+    const auth = require('./auth');
     const { server, mail, mailAllowed } = require('./server');
     await new Promise(r => server.listen(0, r));
     const base = `http://127.0.0.1:${server.address().port}`;
@@ -175,6 +176,49 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     assert.equal(racers.filter(r => r.status === 409 && r.recipient === undefined).length, 3);
     assert.equal((await call('POST', '/api/draw', { name: 'Anna', eventUrl })).status, 409);
 
+    // lootje bewaren in een account
+    assert.equal(typeof draw.claimToken, 'string');
+    assert.equal((await call('GET', '/api/me/lots')).status, 401);
+    const claim = (body, cookie) => call('POST', '/api/me/claim', body, cookie);
+    const badTokens = [
+        'nep', draw.claimToken.slice(0, -3) + 'abc',                                 // onzin, vervalst
+        auth.signToken({ p: 'claim', e: eventUrl, n: 'Anna' }, -10),                 // verlopen
+        auth.signToken({ p: 'iets-anders', e: eventUrl, n: 'Anna' }, 600)            // ander doel
+    ];
+    for (const claimToken of badTokens) assert.equal((await claim({ claimToken, email: 'anna@example.nl' })).status, 400);
+    assert.equal((await claim({ claimToken: draw.claimToken, email: 'geen-adres' })).status, 400);
+    assert.equal((await claim({ claimToken: draw.claimToken, email: 'anna@example.nl', password: 'kort' })).status, 400);
+    assert.equal(registered.has('anna@example.nl'), false);                          // niets aangemaakt bij fouten
+    registered.set('bezet@example.nl', { id: 'b1', email: 'bezet@example.nl' });
+    assert.equal((await claim({ claimToken: draw.claimToken, email: 'bezet@example.nl', password: 'langgenoeg1' })).status, 409);
+
+    const saved = await claim({ claimToken: draw.claimToken, email: 'Anna@Example.nl', password: 'langgenoeg1' });
+    assert.ok(saved.success && saved.loggedIn && saved.cookie);                       // eigen wachtwoord: meteen ingelogd
+    assert.equal(saved.email, 'anna@example.nl');
+    assert.equal(lastRegisterPassword, 'langgenoeg1');
+    const annaCookie = saved.cookie;
+    const mine = await call('GET', '/api/me/lots', null, annaCookie);
+    assert.equal(mine.lots.length, 1);
+    assert.equal(mine.lots[0].giver, 'Anna');
+    assert.equal(mine.lots[0].recipient, draw.recipient);
+    assert.equal(mine.lots[0].eventName, '<b>Test</b>');
+    assert.equal((await call('GET', '/api/me/lots', null, bob)).lots.length, 0);     // een ander account ziet niets
+    assert.equal((await claim({ claimToken: draw.claimToken, email: 'ander@example.nl', password: 'langgenoeg1' })).status, 409);
+    assert.equal(registered.has('ander@example.nl'), false);                          // geen account voor een vergeven lootje
+    assert.ok((await claim({ claimToken: draw.claimToken }, annaCookie)).success);   // zelfde account nog eens: prima
+
+    // zonder wachtwoord: account met willekeurig wachtwoord, mail om er zelf een te kiezen, niet ingelogd
+    const cor = await call('POST', '/api/draw', { name: 'Cor', eventUrl });
+    const noPass = await claim({ claimToken: cor.claimToken, email: 'cor@example.nl' });
+    assert.ok(noPass.success && !noPass.loggedIn && noPass.mailRequested && !noPass.cookie);
+    assert.ok(lastRegisterPassword.length >= 8 && lastRegisterPassword !== 'langgenoeg1');
+    assert.ok(resetRequests.includes('cor@example.nl'));
+
+    // al ingelogd: het lootje gaat naar dat account, zonder e-mail
+    const dirk = await call('POST', '/api/draw', { name: 'Dirk', eventUrl });
+    assert.ok((await claim({ claimToken: dirk.claimToken }, bob)).success);
+    assert.equal((await call('GET', '/api/me/lots', null, bob)).lots[0].giver, 'Dirk');
+
     // uiterlijk: alleen de eigenaar, met geldige waarden
     const setDesign = (cookie, body) => call('POST', '/api/admin/design', { eventUrl, ...body }, cookie);
     assert.equal((await setDesign(bob, { theme: 'nacht', welcome: 'Hoi' })).status, 403);
@@ -230,18 +274,20 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     assert.equal([...docs.deelnemers.values()].filter(d => d.data.eventUrl === eventUrl).length, 0);
     assert.equal((await call('GET', `/api/status?eventUrl=${eventUrl}`)).exists, false);
     assert.equal(files.size, 0);
+    assert.equal((await call('GET', '/api/me/lots', null, annaCookie)).lots.length, 0); // loting weg, lootje weg
 
     // oude organisator zet zijn account om: oude gegevens plus e-mailadres worden een account
     const legacyCode = 'c'.repeat(16);
     fakeCreate('loten', { eventUrl: legacyCode, eventName: 'Oud 2', adminUsername: 'oma', adminHash: store.hashPassword('oudww2'), familyMode: false });
     const legacyRow = () => [...docs.loten.values()].find(d => d.data.eventUrl === legacyCode).data;
+    const registeredBefore = registered.size;
     const convert = body => call('POST', '/api/admin/convert', {
         eventUrl: legacyCode, username: 'oma', password: 'oudww2', email: 'Oma@Example.nl', emailRepeat: 'oma@example.nl', ...body
     });
     assert.equal((await convert({ password: 'fout' })).status, 401);                  // oude gegevens kloppen niet
     assert.equal((await convert({ emailRepeat: 'anders@example.nl' })).status, 400);  // twee keer hetzelfde adres
     assert.equal((await convert({ email: 'geen-adres', emailRepeat: 'geen-adres' })).status, 400);
-    assert.equal(registered.size, 0);                                                 // niets aangemaakt
+    assert.equal(registered.size, registeredBefore);                                  // niets aangemaakt
     registered.set('bestaat@example.nl', { id: 'x1', email: 'bestaat@example.nl' });
     assert.equal((await convert({ email: 'bestaat@example.nl', emailRepeat: 'bestaat@example.nl' })).status, 409);
     assert.equal(legacyRow().ownerId, undefined);                                     // loting blijft koppelbaar
@@ -250,7 +296,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     assert.equal(converted.email, 'oma@example.nl');                                  // adres genormaliseerd
     assert.equal(legacyRow().ownerId, registered.get('oma@example.nl').id);
     assert.equal(legacyRow().ownerEmail, 'oma@example.nl');
-    assert.deepEqual(resetRequests, ['oma@example.nl']);                              // mail aangevraagd bij Apenkaas
+    assert.equal(resetRequests.at(-1), 'oma@example.nl');                             // mail aangevraagd bij Apenkaas
     assert.ok(lastRegisterPassword.length >= 8);                                      // willekeurig wachtwoord, nooit het oude
     assert.notEqual(lastRegisterPassword, 'oudww2');
     assert.equal((await convert({})).status, 401);                                    // is nu al gekoppeld

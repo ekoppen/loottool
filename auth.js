@@ -53,6 +53,13 @@ function readCookie(req, name) {
     return null;
 }
 
+// Korte, getekende tokens voor een doel (bijvoorbeeld "bewaar je lootje"). null als ze niet kloppen of verlopen zijn.
+const signToken = (payload, ttlSeconds) => sign({ ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds });
+const verifyToken = (token, purpose) => {
+    const payload = verify(token);
+    return payload && payload.p === purpose ? payload : null;
+};
+
 // { id, email } of null
 function userFrom(req) {
     const payload = verify(readCookie(req, COOKIE));
@@ -112,11 +119,11 @@ async function tenantPost(path, body) {
     return json;
 }
 
-// Maakt een account met een willekeurig wachtwoord; de gebruiker kiest zelf een wachtwoord via de resetmail.
-// Gooit een fout met duplicate = true als het e-mailadres al een account heeft.
-async function registerUser(email) {
+// Maakt een account. Zonder wachtwoord wordt het een willekeurig wachtwoord; de gebruiker kiest zelf een wachtwoord
+// via de resetmail. Gooit een fout met duplicate = true als het e-mailadres al een account heeft.
+async function registerUser(email, password = crypto.randomBytes(24).toString('base64url')) {
     try {
-        const user = await tenantPost('/register', { email, password: crypto.randomBytes(24).toString('base64url') });
+        const user = await tenantPost('/register', { email, password });
         return { id: user.id, email: user.email };
     } catch (err) {
         err.duplicate = /al in gebruik/i.test(err.message);
@@ -129,6 +136,6 @@ const requestPasswordReset = email => tenantPost('/password-reset/request', { em
 const confirmPasswordReset = (token, newPassword) => tenantPost('/password-reset/confirm', { token, newPassword });
 
 module.exports = {
-    assertConfigured, userFrom, setSession, clearSession, clientConfig, exchangeCode,
+    assertConfigured, signToken, verifyToken, userFrom, setSession, clearSession, clientConfig, exchangeCode,
     registerUser, requestPasswordReset, confirmPasswordReset
 };

@@ -245,6 +245,27 @@ async function markAsViewed(assignment) {
     return true;
 }
 
+// --- Lootjes bewaren in een account ---
+// Koppelt een deelnemer aan een account. 'linked' = nieuw, 'already' = stond al op dit account, 'taken' = ander account.
+async function linkParticipant(assignment, userId) {
+    const row = assignment.row;
+    if (row.gebruikerId) return row.gebruikerId === userId ? 'already' : 'taken';
+    // ponytail: lezen-dan-schrijven; de claim-token is alleen in handen van wie het lootje net zag, dus racen is onwaarschijnlijk.
+    await update(cfg().deelnemers, row, { gebruikerId: userId });
+    return 'linked';
+}
+
+// Alle lootjes die aan een account hangen, nieuwste loting eerst. Alleen voor de ingelogde eigenaar bedoeld.
+async function listLotsFor(userId) {
+    const rows = await find(cfg().deelnemers, { gebruikerId: userId });
+    const lots = [];
+    for (const r of rows) {
+        const lottery = await getLottery(r.eventUrl);
+        if (lottery) lots.push({ eventName: lottery.eventName, created: lottery.createdAt, giver: r.naam, recipient: r.ontvanger });
+    }
+    return lots.sort((a, b) => String(b.created).localeCompare(String(a.created)));
+}
+
 // --- Herstel ---
 async function createRecoverySession(eventUrl, email) {
     if (!(await getLottery(eventUrl))) return null;
@@ -316,6 +337,6 @@ const markRecoveryEmailSent = session => update(cfg().herstel, session, { emailS
 module.exports = {
     assertConfigured, THEMES, designOf, saveDesign, setBackground, clearBackground, getLottery, isOwner, isClaimable, checkLegacy, assignOwner, claimLottery, listLotteries, hashPassword,
     getLotteryData, getLotteryStatus, createLottery, deleteLottery,
-    getAssignment, markAsViewed, createRecoverySession, getRecoverySession, registerRecoveryClick,
+    getAssignment, markAsViewed, linkParticipant, listLotsFor, createRecoverySession, getRecoverySession, registerRecoveryClick,
     removeRecoveryClick, markRecoveryEmailSent
 };

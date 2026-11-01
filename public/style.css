@@ -228,6 +228,10 @@ dialog p { color: var(--muted); }
     100% { transform: rotate(0); }
 }
 
+.savecard { margin-top: 28px; padding: 20px; background: var(--paper-2); border: 1px dashed var(--line); border-radius: 14px; }
+.savecard h3 { margin-bottom: 0; }
+.savecard .lead { margin-bottom: 0; }
+
 /* --- Beheer --- */
 .themes { display: flex; flex-wrap: wrap; gap: 10px; border: 0; padding: 0; margin: 0; }
 .themes legend { padding: 0; margin-bottom: 8px; font-weight: 700; font-size: .92rem; }
