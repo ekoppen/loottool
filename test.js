@@ -8,6 +8,9 @@ const { createAssignments } = require('./assign');
 // --- nep-Apenkaas ---
 const docs = {}; // collectionId -> Map(id -> doc)
 const files = new Set(); // ids van geüploade bestanden in de nep-opslag
+const registered = new Map(); // e-mail -> gebruiker
+const resetRequests = [];
+let lastRegisterPassword = '';
 let lastFileRequest = null; // laatste aanvraag om een bestand aan te maken
 const UNIQUE = { kliks: ['recoveryUrl', 'naam'], deelnemers: ['eventUrl', 'naamLower'] };
 
@@ -28,10 +31,10 @@ const fake = http.createServer((req, res) => {
     req.on('end', () => {
         const send = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
         if (req.url === '/upload') { res.writeHead(204); return res.end(); }
-        if (req.headers.authorization !== 'ApiKey testkey' && !/\/(oauth\/token|logout)$/.test(req.url)) return send(401, { message: 'nee' });
+        if (req.headers.authorization !== 'ApiKey testkey' && !/\/(oauth\/token|logout|register|password-reset\/(request|confirm))$/.test(req.url)) return send(401, { message: 'nee' });
         const url = new URL(req.url, 'http://x');
         const body = raw ? JSON.parse(raw) : {};
-        const m = url.pathname.match(/^\/api\/t1\/(?:collections\/([^/]+)\/documents(?:\/([^/]+))?|(transactions)|(oauth\/token)|(logout)|storage\/buckets\/([^/]+)\/files|storage\/files\/([^/]+))$/);
+        const m = url.pathname.match(/^\/api\/t1\/(?:collections\/([^/]+)\/documents(?:\/([^/]+))?|(transactions)|(oauth\/token)|(logout)|storage\/buckets\/([^/]+)\/files|storage\/files\/([^/]+)|(register)|(password-reset\/request)|(password-reset\/confirm))$/);
         try {
             if (m && m[4]) { // oauth/token: code 'good' = gebruiker u1, 'other' = u2
                 const users = { good: { id: 'u1', email: 'a@b.nl' }, other: { id: 'u2', email: 'c@d.nl' } };
@@ -46,6 +49,19 @@ const fake = http.createServer((req, res) => {
                 return send(200, { file, uploadUrl: `http://127.0.0.1:${fake.address().port}/upload`, fields: { key: 'k' } });
             }
             if (m && m[7]) { files.delete(m[7]); return send(200, { ok: true }); }
+            if (m && m[8]) { // registreren: wachtwoord minstens 8 tekens, e-mail uniek
+                if (registered.has(body.email)) return send(400, { error: 'validation_error', message: 'E-mailadres is al in gebruik' });
+                if (String(body.password).length < 8) return send(400, { error: 'validation_error', message: 'Wachtwoord moet minstens 8 tekens zijn' });
+                lastRegisterPassword = body.password;
+                const user = { id: `n${registered.size + 1}`, email: body.email, role: 'member' };
+                registered.set(body.email, user);
+                return send(200, user);
+            }
+            if (m && m[9]) { resetRequests.push(body.email); return send(200, { ok: true }); }
+            if (m && m[10]) {
+                const ok = body.token === 'goede-token-1234567890' && String(body.newPassword).length >= 8;
+                return ok ? send(200, { ok: true }) : send(400, { error: 'invalid_token', message: 'Ongeldig of verlopen token' });
+            }
             if (m && m[3]) {
                 const snapshot = Object.fromEntries(Object.entries(docs).map(([k, v]) => [k, new Map(v)]));
                 try {
@@ -98,7 +114,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
         RATE_LIMIT_STRICT: '1000', APENKAAS_ACHTERGRONDEN_BUCKET_ID: 'bucket1', APENKAAS_APP_ID: 'app1', SESSION_SECRET: 'x'.repeat(40), BASE_URL: 'http://localhost:3000'
     });
     const store = require('./store');
-    const { server } = require('./server');
+    const { server, mail } = require('./server');
     await new Promise(r => server.listen(0, r));
     const base = `http://127.0.0.1:${server.address().port}`;
     t.after(() => { server.close(); fake.close(); server.closeAllConnections?.(); });
@@ -214,6 +230,75 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     assert.equal([...docs.deelnemers.values()].filter(d => d.data.eventUrl === eventUrl).length, 0);
     assert.equal((await call('GET', `/api/status?eventUrl=${eventUrl}`)).exists, false);
     assert.equal(files.size, 0);
+
+    // oude organisator zet zijn account om: oude gegevens plus e-mailadres worden een account
+    const legacyCode = 'c'.repeat(16);
+    fakeCreate('loten', { eventUrl: legacyCode, eventName: 'Oud 2', adminUsername: 'oma', adminHash: store.hashPassword('oudww2'), familyMode: false });
+    const legacyRow = () => [...docs.loten.values()].find(d => d.data.eventUrl === legacyCode).data;
+    const convert = body => call('POST', '/api/admin/convert', {
+        eventUrl: legacyCode, username: 'oma', password: 'oudww2', email: 'Oma@Example.nl', emailRepeat: 'oma@example.nl', ...body
+    });
+    assert.equal((await convert({ password: 'fout' })).status, 401);                  // oude gegevens kloppen niet
+    assert.equal((await convert({ emailRepeat: 'anders@example.nl' })).status, 400);  // twee keer hetzelfde adres
+    assert.equal((await convert({ email: 'geen-adres', emailRepeat: 'geen-adres' })).status, 400);
+    assert.equal(registered.size, 0);                                                 // niets aangemaakt
+    registered.set('bestaat@example.nl', { id: 'x1', email: 'bestaat@example.nl' });
+    assert.equal((await convert({ email: 'bestaat@example.nl', emailRepeat: 'bestaat@example.nl' })).status, 409);
+    assert.equal(legacyRow().ownerId, undefined);                                     // loting blijft koppelbaar
+    const converted = await convert({});
+    assert.ok(converted.success && converted.mailRequested);
+    assert.equal(converted.email, 'oma@example.nl');                                  // adres genormaliseerd
+    assert.equal(legacyRow().ownerId, registered.get('oma@example.nl').id);
+    assert.equal(legacyRow().ownerEmail, 'oma@example.nl');
+    assert.deepEqual(resetRequests, ['oma@example.nl']);                              // mail aangevraagd bij Apenkaas
+    assert.ok(lastRegisterPassword.length >= 8);                                      // willekeurig wachtwoord, nooit het oude
+    assert.notEqual(lastRegisterPassword, 'oudww2');
+    assert.equal((await convert({})).status, 401);                                    // is nu al gekoppeld
+    assert.equal((await call('GET', '/api/auth/me')).loggedIn, false);                // omzetten logt niet in
+
+    // wachtwoord kiezen via de link uit de mail
+    const choose = (token, password) => call('POST', '/api/auth/reset', { token, password });
+    assert.equal((await choose('goede-token-1234567890', 'kort')).status, 400);
+    assert.equal((await choose('x', 'langgenoeg1')).status, 400);
+    assert.equal((await choose('verkeerde-token-1234567890', 'langgenoeg1')).status, 400);
+    assert.ok((await choose('goede-token-1234567890', 'langgenoeg1')).success);
+
+    // webhook "wachtwoord vergeten": Apenkaas meldt het, wij sturen de mail
+    const hook = async (payload, { secret = 'geheim-voor-test', signature } = {}) => {
+        const body = JSON.stringify(payload);
+        const sig = signature ?? 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');
+        const res = await fetch(`${base}/api/webhooks/apenkaas`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Apenkaas-Signature': sig }, body
+        });
+        return { status: res.status, ...(await res.json()) };
+    };
+    const reset = {
+        event: 'user.password_reset_requested', tenant_id: 't1', timestamp: 'nu',
+        data: { email: 'anna@example.nl', naam: 'Anna <b>', reset_url: `${process.env.APENKAAS_URL}/login/t1/app1/nieuw-wachtwoord?flow=abc` }
+    };
+    const sentMail = [];
+    mail.transporter = { sendMail: async m => { sentMail.push(m); } };
+
+    assert.equal((await hook(reset)).status, 503);                                  // geen geheim ingesteld
+    process.env.APENKAAS_WEBHOOK_SECRET = 'geheim-voor-test';
+    assert.equal((await hook(reset, { secret: 'verkeerd' })).status, 401);          // verkeerde handtekening
+    assert.equal((await hook(reset, { signature: '' })).status, 401);               // geen handtekening
+    assert.equal((await hook({ ...reset, tenant_id: 'andere' })).status, 400);      // andere tenant
+    assert.equal((await hook({ ...reset, event: 'user.register' })).ignored, true); // andere gebeurtenis
+    assert.equal((await hook({ ...reset, data: { ...reset.data, reset_url: 'https://evil.example/nieuw-wachtwoord' } })).status, 400); // link buiten Apenkaas
+    assert.equal(sentMail.length, 0);
+    assert.ok((await hook(reset)).success);
+    assert.equal(sentMail.length, 1);
+    assert.equal(sentMail[0].to, 'anna@example.nl');
+    assert.ok(sentMail[0].html.includes('nieuw-wachtwoord?flow=abc'));
+    assert.ok(!sentMail[0].html.includes('<b>'));                                   // naam is geëscaped
+    const tokenOnly = { ...reset, data: { email: 'oma@example.nl', naam: null, token: 'goede-token-1234567890', reset_url: null } };
+    assert.ok((await hook(tokenOnly)).success);                                     // zonder reset_url: eigen link met token
+    assert.ok(sentMail.at(-1).html.includes('http://localhost:3000/nieuw-wachtwoord?token=goede-token-1234567890'));
+    assert.equal((await hook({ ...tokenOnly, data: { ...tokenOnly.data, token: 'x' } })).status, 400);
+    assert.equal((await hook({ ...tokenOnly, data: { ...tokenOnly.data, token: undefined } })).status, 400);
+    mail.transporter = { sendMail: async () => { throw new Error('smtp stuk'); } };
+    assert.equal((await hook(reset)).status, 503);                                  // mail mislukt: Apenkaas probeert later opnieuw
 
     // uitloggen wist de cookie
     assert.match((await fetch(base + '/api/auth/logout', { method: 'POST' })).headers.get('set-cookie'), /Max-Age=0/);

@@ -134,12 +134,20 @@ const getLottery = eventUrl => findOne(cfg().loten, { eventUrl });
 const isOwner = (lottery, userId) => !!lottery && !!lottery.ownerId && lottery.ownerId === userId;
 const isClaimable = lottery => !!lottery && !lottery.ownerId && !!lottery.adminHash;
 
-async function claimLottery(eventUrl, user, username, password) {
+// Controleert de oude gegevens van een loting zonder iets te wijzigen; geeft de loting of null.
+async function checkLegacy(eventUrl, username, password) {
     const lottery = await getLottery(eventUrl);
     // Altijd een hash berekenen, ook bij onbekende loting, zodat de responstijd niets verklapt.
     const ok = checkPassword(password, isClaimable(lottery) ? lottery.adminHash : hashPassword('x'));
-    if (!isClaimable(lottery) || !sameText(lottery.adminUsername, username) || !ok) return false;
-    await update(cfg().loten, lottery, { ownerId: user.id, ownerEmail: user.email });
+    return isClaimable(lottery) && sameText(lottery.adminUsername, username) && ok ? lottery : null;
+}
+
+const assignOwner = (lottery, user) => update(cfg().loten, lottery, { ownerId: user.id, ownerEmail: user.email });
+
+async function claimLottery(eventUrl, user, username, password) {
+    const lottery = await checkLegacy(eventUrl, username, password);
+    if (!lottery) return false;
+    await assignOwner(lottery, user);
     return true;
 }
 
@@ -306,7 +314,7 @@ const removeRecoveryClick = clickId => api('DELETE', `/collections/${cfg().kliks
 const markRecoveryEmailSent = session => update(cfg().herstel, session, { emailSent: true });
 
 module.exports = {
-    assertConfigured, THEMES, designOf, saveDesign, setBackground, clearBackground, getLottery, isOwner, isClaimable, claimLottery, listLotteries, hashPassword,
+    assertConfigured, THEMES, designOf, saveDesign, setBackground, clearBackground, getLottery, isOwner, isClaimable, checkLegacy, assignOwner, claimLottery, listLotteries, hashPassword,
     getLotteryData, getLotteryStatus, createLottery, deleteLottery,
     getAssignment, markAsViewed, createRecoverySession, getRecoverySession, registerRecoveryClick,
     removeRecoveryClick, markRecoveryEmailSent

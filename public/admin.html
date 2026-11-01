@@ -32,6 +32,30 @@
             <h2>Log in om te beginnen</h2>
             <p class="lead">Met een account kun je lotingen maken en later terugvinden, ook als je je beheerlink kwijt bent.</p>
             <button id="loginBtn" class="btn btn-block" type="button">Inloggen of account maken</button>
+            <p class="footer">Had je vorig jaar een gebruikersnaam en wachtwoord voor je loting? <button class="link" type="button" id="toLegacy">Zet dat om naar een account</button></p>
+        </section>
+
+        <!-- Oud account omzetten -->
+        <section id="legacyScreen" class="screen hidden">
+            <h2>Oud account omzetten</h2>
+            <p class="lead">Vul de gebruikersnaam en het wachtwoord van je oude loting in, plus het e-mailadres voor je nieuwe account. We sturen een mail waarmee je zelf een wachtwoord kiest.</p>
+            <form id="legacyForm" class="stack">
+                <div class="field"><label for="legacyCode">Code van je loting</label>
+                    <input id="legacyCode" maxlength="16" placeholder="a1b2c3d4e5f6a7b8" autocomplete="off" spellcheck="false" required>
+                    <small>De 16 tekens uit je oude beheerlink: /admin/<b>a1b2c3d4e5f6a7b8</b></small></div>
+                <div class="field"><label for="legacyUser">Oude gebruikersnaam</label><input id="legacyUser" autocomplete="off" required></div>
+                <div class="field"><label for="legacyPass">Oud wachtwoord</label><input id="legacyPass" type="password" autocomplete="off" required></div>
+                <div class="field"><label for="legacyEmail">E-mailadres voor je account</label><input id="legacyEmail" type="email" autocomplete="email" required></div>
+                <div class="field"><label for="legacyEmail2">E-mailadres nog een keer</label><input id="legacyEmail2" type="email" autocomplete="off" required></div>
+                <button class="btn btn-block" type="submit">Account maken en loting koppelen</button>
+                <button id="legacyBack" class="btn btn-ghost btn-block" type="button">Terug</button>
+            </form>
+        </section>
+
+        <section id="legacyDoneScreen" class="screen hidden">
+            <h2>Check je mail</h2>
+            <p id="legacyDoneText" class="lead"></p>
+            <div class="actions"><button id="legacyLogin" class="btn btn-block" type="button">Naar inloggen</button></div>
         </section>
 
         <!-- Mijn lotingen -->
@@ -261,6 +285,24 @@
             if (data.needLogin) { $('account').classList.add('hidden'); showScreen('loginScreen'); }
             return data;
         }
+
+        // --- Oud account omzetten ---
+        $('toLegacy').onclick = () => { $('legacyCode').value = pathCode || ''; showScreen('legacyScreen'); };
+        $('legacyBack').onclick = () => showScreen('loginScreen');
+        $('legacyLogin').onclick = startLogin;
+        $('legacyForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            const data = await api('/api/admin/convert', {
+                eventUrl: $('legacyCode').value.trim(), username: $('legacyUser').value, password: $('legacyPass').value,
+                email: $('legacyEmail').value, emailRepeat: $('legacyEmail2').value
+            });
+            if (!data.success) return toast('Omzetten mislukt', data.message, 'error');
+            $('legacyPass').value = '';
+            $('legacyDoneText').textContent = data.mailRequested
+                ? `We hebben een mail gestuurd naar ${data.email}. Kies daarin je wachtwoord (de link werkt een uur) en log daarna in. Je loting staat al op je account.`
+                : `Je account voor ${data.email} is gemaakt en je loting is gekoppeld. De mail met de wachtwoordlink kon niet worden aangevraagd. Kies op de loginpagina "Wachtwoord vergeten" om een wachtwoord te kiezen.`;
+            showScreen('legacyDoneScreen');
+        });
 
         // --- Mijn lotingen ---
         async function showList() {

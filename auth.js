@@ -98,4 +98,37 @@ async function exchangeCode(code, verifier) {
     return { id: user.id, email: user.email, naam: user.naam || null };
 }
 
-module.exports = { assertConfigured, userFrom, setSession, clearSession, clientConfig, exchangeCode };
+// Publieke Apenkaas-routes van de tenant (geen sleutel nodig).
+async function tenantPost(path, body) {
+    const c = cfg();
+    const res = await fetch(`${c.url}/api/${c.tenant}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10000)
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(json.message || `Apenkaas fout ${res.status}`), { status: res.status });
+    return json;
+}
+
+// Maakt een account met een willekeurig wachtwoord; de gebruiker kiest zelf een wachtwoord via de resetmail.
+// Gooit een fout met duplicate = true als het e-mailadres al een account heeft.
+async function registerUser(email) {
+    try {
+        const user = await tenantPost('/register', { email, password: crypto.randomBytes(24).toString('base64url') });
+        return { id: user.id, email: user.email };
+    } catch (err) {
+        err.duplicate = /al in gebruik/i.test(err.message);
+        throw err;
+    }
+}
+
+// Apenkaas meldt dit via de webhook aan de loottool, die de mail met de link verstuurt.
+const requestPasswordReset = email => tenantPost('/password-reset/request', { email });
+const confirmPasswordReset = (token, newPassword) => tenantPost('/password-reset/confirm', { token, newPassword });
+
+module.exports = {
+    assertConfigured, userFrom, setSession, clearSession, clientConfig, exchangeCode,
+    registerUser, requestPasswordReset, confirmPasswordReset
+};

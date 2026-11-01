@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <meta name="referrer" content="no-referrer">
+    <title>Kies je wachtwoord - Sinterklaas Lootjes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Fraunces:ital,wght@0,700;0,800;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <main class="sheet">
+        <header class="brand">
+            <img src="/sint.png" alt="">
+            <div>
+                <h1>Sinterklaas Lootjes</h1>
+                <p>Kies je wachtwoord</p>
+            </div>
+        </header>
+
+        <section id="formScreen" class="screen">
+            <h2>Nieuw wachtwoord</h2>
+            <p class="lead">Kies een wachtwoord van minimaal 8 tekens. Daarmee log je daarna in bij je account.</p>
+            <form id="resetForm" class="stack">
+                <div class="field"><label for="password">Wachtwoord</label>
+                    <input id="password" type="password" minlength="8" maxlength="200" autocomplete="new-password" required></div>
+                <div class="field"><label for="password2">Nog een keer</label>
+                    <input id="password2" type="password" minlength="8" maxlength="200" autocomplete="new-password" required></div>
+                <button class="btn btn-block" type="submit">Wachtwoord opslaan</button>
+            </form>
+        </section>
+
+        <section id="doneScreen" class="screen hidden">
+            <div class="note note-ok">Je wachtwoord is opgeslagen.</div>
+            <div class="actions"><a class="btn btn-block" href="/admin.html">Inloggen</a></div>
+        </section>
+
+        <section id="badScreen" class="screen hidden">
+            <div class="note note-error" id="badMessage">Deze link werkt niet.</div>
+            <p class="lead" style="margin-top: 16px">Kies op de loginpagina "Wachtwoord vergeten" voor een nieuwe link.</p>
+            <div class="actions"><a class="btn btn-ghost btn-block" href="/admin.html">Naar inloggen</a></div>
+        </section>
+    </main>
+
+    <script src="/common.js"></script>
+    <script>
+        const token = new URLSearchParams(location.search).get('token');
+        // De token hoort niet in de adresbalk of geschiedenis te blijven staan.
+        history.replaceState({}, '', '/nieuw-wachtwoord');
+        if (!token) { $('badMessage').textContent = 'Deze link is niet compleet.'; showScreen('badScreen'); }
+
+        $('resetForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            if ($('password').value !== $('password2').value) return toast('De wachtwoorden zijn niet gelijk', 'Typ twee keer hetzelfde wachtwoord.', 'error');
+            const data = await api('/api/auth/reset', { token, password: $('password').value });
+            if (data.success) return showScreen('doneScreen');
+            $('badMessage').textContent = data.message || 'Opslaan lukte niet.';
+            showScreen('badScreen');
+        });
+    </script>
+</body>
+</html>

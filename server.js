@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { Server } = require('socket.io');
 const store = require('./store');
@@ -19,7 +20,8 @@ const MAX_PARTICIPANTS = 50; // past in één Apenkaas-transactie (max. 100 acti
 if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || true);
 
 // --- E-mail ---
-const emailTransporter = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
+const mail = {};
+mail.transporter = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
     ? nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD } })
     : null;
 
@@ -30,7 +32,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 // Per uur: 40 in totaal; aanmaakmail (open voor iedereen) krijgt daar maximaal 20 van, zodat de
 // herstelmail altijd ruimte houdt. Per soort geldt verder 3 per adres en 5 per IP.
 // ponytail: in het geheugen, werkt voor één serverinstantie.
-const MAIL_KIND_CAP = { create: 20, recovery: 30 };
+const MAIL_KIND_CAP = { create: 20, recovery: 30, reset: 20 };
 const sentMail = [];
 function mailAllowed(kind, to, ip) {
     const cutoff = Date.now() - 60 * 60 * 1000;
@@ -45,9 +47,9 @@ function mailAllowed(kind, to, ip) {
 }
 
 async function sendMail(kind, to, subject, html, ip) {
-    if (!emailTransporter || !mailAllowed(kind, to, ip)) return false;
+    if (!mail.transporter || !mailAllowed(kind, to, ip)) return false;
     try {
-        await emailTransporter.sendMail({ from: process.env.GMAIL_USER, to, subject, html });
+        await mail.transporter.sendMail({ from: process.env.GMAIL_USER, to, subject, html });
         return true;
     } catch (error) {
         console.error('Mail versturen mislukt:', error.message);
@@ -74,6 +76,15 @@ function sendLotteryReadyEmail(email, eventName, eventUrl, ip) {
         <p style="color: #8a7a68;">Log in met je account om de loting te beheren.</p>`), ip);
 }
 
+function sendPasswordResetEmail(email, name, resetUrl) {
+    return sendMail('reset', email, 'Kies je wachtwoord voor Sinterklaas Lootjes', mailFrame(`
+        <h2>Kies je wachtwoord</h2>
+        <p>${name ? `Hallo ${esc(name)}, met` : 'Met'} deze knop kies je een wachtwoord voor je account bij Sinterklaas Lootjes. De link werkt één uur.</p>
+        <p><a href="${esc(resetUrl)}" style="display: inline-block; padding: 12px 22px; color: #fff; background: #b3202f; border-radius: 999px; text-decoration: none; font-weight: bold;">Kies een nieuw wachtwoord</a></p>
+        <p style="color: #8a7a68;">Werkt de knop niet? Plak dan deze link in je browser:<br>${esc(resetUrl)}</p>
+        <p style="color: #8a7a68;">Heb je dit niet aangevraagd? Dan hoef je niets te doen.</p>`));
+}
+
 function sendRecoveryEmail(email, eventName, recipientName, ip) {
     return sendMail('recovery', email, 'Je Sinterklaas lootje', mailFrame(`
         <h2>Je lootje van "${esc(eventName)}"</h2>
@@ -83,7 +94,7 @@ function sendRecoveryEmail(email, eventName, recipientName, ip) {
 }
 
 // --- Middleware ---
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '100kb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.raw({ type: 'image/jpeg', limit: '1600kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -110,6 +121,7 @@ const cleanText = (v, max) => {
     return t && t.length <= max ? t : null;
 };
 const isEmail = v => typeof v === 'string' && v.length <= 200 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+const TOKEN_RE = /^[A-Za-z0-9._~-]{16,200}$/;
 const isCode = v => typeof v === 'string' && /^[a-f0-9]{16}$/.test(v);
 
 // --- Pagina's ---
@@ -117,6 +129,7 @@ const page = name => (req, res) => res.sendFile(path.join(__dirname, 'public', n
 app.get('/event/:eventUrl', page('index.html'));
 app.get('/admin/:eventUrl', page('admin.html'));
 app.get('/recovery/:recoveryUrl', page('recovery.html'));
+app.get('/nieuw-wachtwoord', page('reset.html'));
 
 io.on('connection', socket => {
     socket.on('join-event', code => isCode(code) && socket.join(`event:${code}`));
@@ -181,6 +194,51 @@ app.post('/api/admin/claim', needUser, strict, wrap(async (req, res) => {
     if (!isCode(eventUrl) || typeof username !== 'string' || typeof password !== 'string') return fail(res, 400, 'Alle velden zijn verplicht');
     if (!(await store.claimLottery(eventUrl, req.user, username.trim(), password.trim()))) {
         return fail(res, 401, 'Deze gegevens kloppen niet, of de loting is al gekoppeld aan een account.');
+    }
+    res.json({ success: true });
+}));
+
+// Organisator van vóór de accounts: oude gegevens plus een e-mailadres worden een account en de loting wordt
+// gekoppeld. Het wachtwoord kiest de gebruiker via de mail, dus wie het adres opgeeft moet er ook bij kunnen.
+app.post('/api/admin/convert', strict, wrap(async (req, res) => {
+    const { eventUrl, username, password, email, emailRepeat } = req.body;
+    if (!isCode(eventUrl) || typeof username !== 'string' || typeof password !== 'string') return fail(res, 400, 'Alle velden zijn verplicht');
+    const address = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (!isEmail(address) || address !== String(emailRepeat || '').trim().toLowerCase()) {
+        return fail(res, 400, 'Vul hetzelfde, geldige e-mailadres twee keer in');
+    }
+    const lottery = await store.checkLegacy(eventUrl, username.trim(), password.trim());
+    if (!lottery) return fail(res, 401, 'Deze gegevens kloppen niet, of de loting is al gekoppeld aan een account.');
+
+    let user;
+    try {
+        user = await auth.registerUser(address);
+    } catch (err) {
+        if (err.duplicate) return fail(res, 409, 'Er is al een account met dit e-mailadres. Log daarmee in en koppel de loting daarna.');
+        throw err;
+    }
+    await store.assignOwner(lottery, user);
+
+    let mailRequested = true;
+    try {
+        await auth.requestPasswordReset(address);
+    } catch (err) {
+        console.error('Resetmail aanvragen mislukt:', err.message);
+        mailRequested = false;
+    }
+    res.json({ success: true, mailRequested, email: address });
+}));
+
+// Wachtwoord kiezen via de link uit de mail (token komt van Apenkaas via de webhook).
+app.post('/api/auth/reset', strict, wrap(async (req, res) => {
+    const { token, password } = req.body;
+    if (typeof token !== 'string' || !TOKEN_RE.test(token) || typeof password !== 'string') return fail(res, 400, 'Ongeldige aanvraag');
+    if (password.length < 8 || password.length > 200) return fail(res, 400, 'Kies een wachtwoord van minimaal 8 tekens');
+    try {
+        await auth.confirmPasswordReset(token, password);
+    } catch (err) {
+        if (err.status && err.status < 500) return fail(res, 400, 'Deze link is verlopen of al gebruikt. Kies "Wachtwoord vergeten" op de loginpagina voor een nieuwe.');
+        throw err;
     }
     res.json({ success: true });
 }));
@@ -311,7 +369,7 @@ app.get('/api/status', wrap(async (req, res) => {
 app.post('/api/recovery/create', needUser, strict, wrap(async (req, res) => {
     if (!(await ownLottery(req, res, req.body.eventUrl))) return;
     if (!isEmail(req.body.recoveryEmail)) return fail(res, 400, 'Voer een geldig e-mailadres in');
-    if (!emailTransporter) return fail(res, 503, 'E-mail is niet ingesteld op de server, herstel kan dus geen mail sturen.');
+    if (!mail.transporter) return fail(res, 503, 'E-mail is niet ingesteld op de server, herstel kan dus geen mail sturen.');
 
     const recoveryUrl = await store.createRecoverySession(req.body.eventUrl, req.body.recoveryEmail.trim());
     res.json({ success: true, recoveryUrl, fullUrl: `${baseUrl()}/recovery/${recoveryUrl}` });
@@ -357,6 +415,41 @@ app.post('/api/recovery/click', rateLimit(120), wrap(async (req, res) => {
     res.json({ success: true, message: 'Bedankt voor je klik!', ...counts, emailSent: false });
 }));
 
+// --- Webhook van Apenkaas: wachtwoord vergeten ---
+// Apenkaas heeft geen eigen e-mail; het meldt de aanvraag hier en wij sturen de mail.
+// Een niet-2xx antwoord laat Apenkaas het later opnieuw proberen (max. 6 keer).
+const sameSignature = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+
+app.post('/api/webhooks/apenkaas', wrap(async (req, res) => {
+    const secret = process.env.APENKAAS_WEBHOOK_SECRET;
+    if (!secret) return fail(res, 503, 'Webhook is niet ingesteld');
+    const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(req.rawBody || '').digest('hex');
+    if (!sameSignature(String(req.get('X-Apenkaas-Signature') || ''), expected)) return fail(res, 401, 'Ongeldige handtekening');
+
+    const { event, tenant_id: tenant, data } = req.body || {};
+    if (tenant !== process.env.APENKAAS_TENANT) return fail(res, 400, 'Onbekende tenant');
+    if (event !== 'user.password_reset_requested') return res.json({ success: true, ignored: true });
+
+    if (!data || !isEmail(data.email)) return fail(res, 400, 'Ongeldige melding');
+    // Via de loginpagina komt een resetlink van Apenkaas mee; bij een aanvraag via de API alleen een token,
+    // dan verwijzen we naar onze eigen pagina. Ook een ondertekende resetlink moet naar Apenkaas wijzen.
+    let link;
+    if (data.reset_url) {
+        let url;
+        try { url = new URL(data.reset_url); } catch { return fail(res, 400, 'Ongeldige resetlink'); }
+        if (url.origin !== new URL(process.env.APENKAAS_URL || 'https://apenkaas.nl').origin) return fail(res, 400, 'Ongeldige melding');
+        link = url.href;
+    } else if (typeof data.token === 'string' && TOKEN_RE.test(data.token)) {
+        link = `${baseUrl()}/nieuw-wachtwoord?token=${encodeURIComponent(data.token)}`;
+    } else {
+        return fail(res, 400, 'Ongeldige melding');
+    }
+
+    const name = typeof data.naam === 'string' ? data.naam.slice(0, 80) : '';
+    if (!(await sendPasswordResetEmail(data.email.trim(), name, link))) return fail(res, 503, 'De e-mail kon niet worden verstuurd');
+    res.json({ success: true });
+}));
+
 // --- Fouten ---
 app.use((err, req, res, next) => {
     console.error(req.method, req.path, err);
@@ -370,8 +463,8 @@ if (require.main === module) {
     auth.assertConfigured();
     server.listen(PORT, '0.0.0.0', () => {
         console.log(`Sinterklaas Lootjes draait op http://0.0.0.0:${PORT} (backend: Apenkaas)`);
-        console.log(emailTransporter ? 'E-mail ingesteld' : 'E-mail niet ingesteld: herstel-mails en inlogmails staan uit');
+        console.log(mail.transporter ? 'E-mail ingesteld' : 'E-mail niet ingesteld: herstel-mails en inlogmails staan uit');
     });
 }
 
-module.exports = { app, server };
+module.exports = { app, server, mail };
