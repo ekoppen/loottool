@@ -21,8 +21,10 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PRO
 
 // --- E-mail ---
 const mail = {};
-mail.transporter = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
-    ? nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD } })
+// Google toont een app-wachtwoord in blokjes van 4, gescheiden door (soms niet-afbrekende) spaties; die horen er niet bij.
+const gmailPassword = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+mail.transporter = process.env.GMAIL_USER && gmailPassword
+    ? nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: gmailPassword } })
     : null;
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
