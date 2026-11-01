@@ -117,3 +117,25 @@ async function finishLogin() {
     history.replaceState({}, '', target);
     return target;
 }
+
+// Confetti en pepernoten vanuit het midden van het scherm. Ruimt zichzelf op.
+function confetti(count = 90) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const colors = ['#e5383b', '#ffd166', '#ff8fab', '#7ae7c7', '#8ecae6', '#c8b6ff', '#ffb26b', '#ffffff'];
+    const box = document.createElement('div');
+    box.className = 'confetti';
+    box.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < count; i++) {
+        const s = document.createElement('span');
+        const kind = Math.random();
+        const size = 8 + Math.random() * 10;
+        const nut = kind > 0.85;
+        s.style.cssText = `width:${nut ? size : kind > .5 ? size * .55 : size}px;height:${nut ? size : kind > .5 ? size * 1.4 : size}px;`
+            + `background:${nut ? '#a8692f' : colors[i % colors.length]};border-radius:${nut || kind < .2 ? '50%' : '2px'};`
+            + `--dx:${(Math.random() - .5) * Math.min(innerWidth, 600)}px;--up:${-(140 + Math.random() * 220)}px;`
+            + `--rot:${(Math.random() - .5) * 1080}deg;--dur:${1.6 + Math.random() * 1.4}s;--delay:${Math.random() * .25}s`;
+        box.appendChild(s);
+    }
+    document.body.appendChild(box);
+    setTimeout(() => box.remove(), 3600);
+}

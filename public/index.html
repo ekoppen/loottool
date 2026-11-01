@@ -7,7 +7,7 @@
     <title>Sinterklaas Lootjes</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Fraunces:ital,wght@0,700;0,800;1,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900;1,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -26,6 +26,7 @@
             <h2>Loten trekken zonder hoed</h2>
             <p class="lead">Maak een loting voor familie, vrienden of collega's. Iedereen trekt zelf online zijn lootje, en niemand trekt zichzelf.</p>
             <a class="btn btn-block" href="/admin.html">Maak een loting</a>
+            <div class="pile" aria-hidden="true"><img src="/kado.png" alt=""><img src="/kado.png" alt=""><img src="/kado.png" alt=""><img src="/kado.png" alt=""><img src="/kado.png" alt=""></div>
             <p class="footer">Heb je een link gekregen? Open die link, dan zie je de namen van je groep.</p>
         </section>
 
@@ -136,14 +137,26 @@
             $('giverLine').textContent = data.giver;
             $('recipientName').textContent = data.recipient;
             $('reveal').classList.add('hidden');
-            $('parcel').classList.remove('hidden');
+            $('parcel').classList.remove('hidden', 'shaking');
+            $('parcel').querySelector('b').textContent = 'Tik om uit te pakken';
+            opening = false;
             showScreen('resultScreen');
         }
 
+        // Pakje schudt even, dan knalt het open met confetti en zwaait het label in beeld.
+        let opening = false;
         $('parcel').addEventListener('click', () => {
-            $('parcel').classList.add('hidden');
-            $('reveal').classList.remove('hidden');
-            if (claimToken) $('saveForm').classList.remove('hidden'); // pas na het uitpakken: eerst het lootje zelf
+            if (opening) return;
+            opening = true;
+            const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+            $('parcel').classList.add('shaking');
+            $('parcel').querySelector('b').textContent = 'Hé, wat rammelt daar?';
+            setTimeout(() => {
+                $('parcel').classList.add('hidden');
+                $('reveal').classList.remove('hidden');
+                confetti();
+                if (claimToken) $('saveForm').classList.remove('hidden'); // pas na het uitpakken: eerst het lootje zelf
+            }, reduce ? 0 : 1100);
         });
 
         // Lootje bewaren: account maken (of het ingelogde account gebruiken) en het lootje daaraan koppelen.
