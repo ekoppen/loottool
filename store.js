@@ -82,20 +82,32 @@ const sameText = (a, b) => {
 // --- Loten ---
 const getLottery = eventUrl => findOne(cfg().loten, { eventUrl });
 
-async function verifyAdmin(eventUrl, username, password) {
+// Eigenaar = Apenkaas-gebruiker. Oude lotingen (van vóór accounts) hebben nog een eigen
+// gebruikersnaam en wachtwoord en kunnen met die gegevens aan een account worden gekoppeld.
+const isOwner = (lottery, userId) => !!lottery && !!lottery.ownerId && lottery.ownerId === userId;
+const isClaimable = lottery => !!lottery && !lottery.ownerId && !!lottery.adminHash;
+
+async function claimLottery(eventUrl, user, username, password) {
     const lottery = await getLottery(eventUrl);
     // Altijd een hash berekenen, ook bij onbekende loting, zodat de responstijd niets verklapt.
-    const ok = checkPassword(password, lottery ? lottery.adminHash : hashPassword('x'));
-    return !!lottery && sameText(lottery.adminUsername, username) && ok;
+    const ok = checkPassword(password, isClaimable(lottery) ? lottery.adminHash : hashPassword('x'));
+    if (!isClaimable(lottery) || !sameText(lottery.adminUsername, username) || !ok) return false;
+    await update(cfg().loten, lottery, { ownerId: user.id, ownerEmail: user.email });
+    return true;
 }
 
-async function createLottery({ eventName, adminUsername, adminPassword, participants, families, familyMode, assignments }) {
+const listLotteries = async ownerId =>
+    (await find(cfg().loten, { ownerId }))
+        .map(l => ({ eventUrl: l.eventUrl, eventName: l.eventName, created: l.createdAt }))
+        .sort((a, b) => String(b.created).localeCompare(String(a.created)));
+
+async function createLottery({ eventName, owner, participants, families, familyMode, assignments }) {
     const c = cfg();
     const eventUrl = crypto.randomBytes(8).toString('hex');
     const createdAt = new Date().toISOString();
     const ops = [{
         action: 'create', collectionId: c.loten,
-        data: { eventUrl, eventName, adminUsername, adminHash: hashPassword(adminPassword), familyMode: !!familyMode, createdAt }
+        data: { eventUrl, eventName, ownerId: owner.id, ownerEmail: owner.email, familyMode: !!familyMode, createdAt }
     }];
     for (const naam of participants) {
         ops.push({
@@ -243,7 +255,8 @@ const removeRecoveryClick = clickId => api('DELETE', `/collections/${cfg().kliks
 const markRecoveryEmailSent = session => update(cfg().herstel, session, { emailSent: true });
 
 module.exports = {
-    assertConfigured, getLotteryData, getLotteryStatus, createLottery, deleteLottery, verifyAdmin,
+    assertConfigured, getLottery, isOwner, isClaimable, claimLottery, listLotteries, hashPassword,
+    getLotteryData, getLotteryStatus, createLottery, deleteLottery,
     getAssignment, markAsViewed, createRecoverySession, getRecoverySession, registerRecoveryClick,
     removeRecoveryClick, markRecoveryEmailSent
 };

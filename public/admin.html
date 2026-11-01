@@ -20,46 +20,46 @@
             </div>
         </header>
 
-        <!-- Stap 1: gegevens -->
-        <section id="setupScreen" class="screen">
-            <ol class="steps"><li class="on"><span>1</span>Gegevens</li><li><span>2</span>Deelnemers</li></ol>
-            <h2>Start een nieuwe loting</h2>
-            <p class="lead">Je kiest zelf een gebruikersnaam en wachtwoord om de loting later te beheren.</p>
-            <form id="setupForm" class="stack">
-                <div class="field"><label for="eventName">Naam van de loting</label>
-                    <input id="eventName" maxlength="80" placeholder="Familie Jansen 2026" required></div>
-                <div class="field"><label for="adminUsername">Gebruikersnaam</label>
-                    <input id="adminUsername" maxlength="40" autocomplete="username" required></div>
-                <div class="field"><label for="adminPassword">Wachtwoord</label>
-                    <input id="adminPassword" type="password" minlength="4" autocomplete="new-password" required>
-                    <small>Minimaal 4 tekens. Bewaar het goed, we kunnen het niet terugzoeken.</small></div>
-                <div class="field"><label for="adminEmail">E-mailadres (niet verplicht)</label>
-                    <input id="adminEmail" type="email" autocomplete="email" placeholder="je@email.nl">
-                    <small>Dan mailen we je de links en je inloggegevens.</small></div>
-                <button class="btn btn-block" type="submit">Verder naar deelnemers</button>
-            </form>
-            <p class="footer">Heb je al een loting? <button class="link" type="button" id="toLogin">Log in</button></p>
-        </section>
+        <div id="account" class="account hidden">
+            <span id="accountEmail"></span>
+            <button id="logoutBtn" class="link" type="button">Uitloggen</button>
+        </div>
+
+        <section id="loadingScreen" class="screen"><p class="lead">Even laden…</p></section>
 
         <!-- Inloggen -->
         <section id="loginScreen" class="screen hidden">
-            <h2>Log in bij je loting</h2>
-            <form id="loginForm" class="stack">
-                <div class="field"><label for="loginCode">Code van je loting</label>
-                    <input id="loginCode" maxlength="16" placeholder="a1b2c3d4e5f6a7b8" autocomplete="off" spellcheck="false" required>
-                    <small>De 16 tekens uit je beheerlink: /admin/<b>a1b2c3d4e5f6a7b8</b></small></div>
-                <div class="field"><label for="loginUsername">Gebruikersnaam</label>
-                    <input id="loginUsername" autocomplete="username" required></div>
-                <div class="field"><label for="loginPassword">Wachtwoord</label>
-                    <input id="loginPassword" type="password" autocomplete="current-password" required></div>
-                <button class="btn btn-block" type="submit">Inloggen</button>
+            <h2>Log in om te beginnen</h2>
+            <p class="lead">Met een account kun je lotingen maken en later terugvinden, ook als je je beheerlink kwijt bent.</p>
+            <button id="loginBtn" class="btn btn-block" type="button">Inloggen of account maken</button>
+        </section>
+
+        <!-- Mijn lotingen -->
+        <section id="listScreen" class="screen hidden">
+            <h2>Mijn lotingen</h2>
+            <ul id="myLotteries" class="people"></ul>
+            <p id="noLotteries" class="lead hidden">Je hebt nog geen lotingen.</p>
+            <div class="actions">
+                <button id="newBtn" class="btn btn-block" type="button">Nieuwe loting</button>
+            </div>
+            <p class="footer">Heb je een loting van vorig jaar? Open de oude beheerlink terwijl je ingelogd bent, dan kun je hem aan dit account koppelen.</p>
+        </section>
+
+        <!-- Stap 1: naam -->
+        <section id="setupScreen" class="screen hidden">
+            <ol class="steps"><li class="on"><span>1</span>Naam</li><li><span>2</span>Deelnemers</li></ol>
+            <h2>Start een nieuwe loting</h2>
+            <form id="setupForm" class="stack">
+                <div class="field"><label for="eventName">Naam van de loting</label>
+                    <input id="eventName" maxlength="80" placeholder="Familie Jansen 2026" required></div>
+                <button class="btn btn-block" type="submit">Verder naar deelnemers</button>
+                <button id="setupBack" class="btn btn-ghost btn-block" type="button">Terug</button>
             </form>
-            <p class="footer"><button class="link" type="button" id="toSetup">Nieuwe loting starten</button></p>
         </section>
 
         <!-- Stap 2: deelnemers -->
         <section id="peopleScreen" class="screen hidden">
-            <ol class="steps"><li><span>1</span>Gegevens</li><li class="on"><span>2</span>Deelnemers</li></ol>
+            <ol class="steps"><li><span>1</span>Naam</li><li class="on"><span>2</span>Deelnemers</li></ol>
             <h2>Wie doen er mee?</h2>
             <p class="lead">Voeg minimaal 3 mensen toe.</p>
 
@@ -102,9 +102,6 @@
                 <div class="field"><label for="shareUrl">Stuur deze link naar de deelnemers</label>
                     <div class="copyrow"><input id="shareUrl" readonly>
                         <button class="btn btn-small" type="button" data-copy="shareUrl">Kopieer</button></div></div>
-                <div class="field"><label for="adminUrl">Jouw beheerlink (niet delen)</label>
-                    <div class="copyrow"><input id="adminUrl" readonly>
-                        <button class="btn btn-small btn-ghost" type="button" data-copy="adminUrl">Kopieer</button></div></div>
 
                 <div><h3>Deelnemers</h3><ul id="dashPeople" class="people"></ul></div>
             </div>
@@ -112,8 +109,27 @@
             <div class="actions">
                 <button id="recoveryBtn" class="btn btn-ghost btn-block" type="button">Iemand is zijn lootje vergeten</button>
                 <button id="deleteBtn" class="btn btn-danger btn-block" type="button">Loting verwijderen</button>
-                <button id="logoutBtn" class="btn btn-ghost btn-block" type="button">Uitloggen</button>
+                <button id="toListBtn" class="btn btn-ghost btn-block" type="button">Alle lotingen</button>
             </div>
+        </section>
+
+        <!-- Oude loting koppelen -->
+        <section id="claimScreen" class="screen hidden">
+            <h2>Loting van vorig jaar koppelen</h2>
+            <p class="lead">Deze loting is gemaakt vóór er accounts waren. Vul de oude gebruikersnaam en het oude wachtwoord in om hem aan dit account te koppelen.</p>
+            <form id="claimForm" class="stack">
+                <div class="field"><label for="claimUser">Gebruikersnaam</label><input id="claimUser" autocomplete="off" required></div>
+                <div class="field"><label for="claimPass">Wachtwoord</label><input id="claimPass" type="password" autocomplete="off" required></div>
+                <button class="btn btn-block" type="submit">Koppelen</button>
+                <button class="btn btn-ghost btn-block" type="button" data-to-list>Terug naar mijn lotingen</button>
+            </form>
+        </section>
+
+        <!-- Andermans loting -->
+        <section id="foreignScreen" class="screen hidden">
+            <h2>Dit is niet jouw loting</h2>
+            <p class="lead">Deze loting hoort bij een ander account. Log in met het account waarmee hij is gemaakt.</p>
+            <div class="actions"><button class="btn btn-ghost btn-block" type="button" data-to-list>Naar mijn lotingen</button></div>
         </section>
     </main>
 
@@ -151,57 +167,95 @@
     <script src="/common.js"></script>
     <script>
         const MIN_PEOPLE = 3;
+        const STORAGE_KEY = 'lootjes-login';
         const pathCode = (location.pathname.match(/^\/admin\/([a-f0-9]{16})$/) || [])[1] || null;
 
-        let eventUrl = pathCode;
-        let creds = { username: '', password: '' };
-        let setup = {};
+        let eventUrl = null;
+        let eventName = '';
         let people = [];       // namen in volgorde van toevoegen
         let families = {};     // naam -> gezin
         let familyMode = false;
         let editing = null;
+        let socket = null;
 
-        const auth = () => ({ eventUrl, ...creds });
-        const show = id => showScreen(id);
+        const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const randomString = n => b64url(crypto.getRandomValues(new Uint8Array(n)));
 
-        // --- Stap 1 en inloggen ---
+        // --- Inloggen (authorization code met PKCE) ---
+        async function startLogin() {
+            const cfg = await api('/api/auth/config');
+            if (!cfg.loginUrl) return toast('Inloggen is nog niet ingesteld', '', 'error');
+            const verifier = randomString(48);
+            const state = randomString(16);
+            const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+            const returnTo = pathCode ? `/admin/${pathCode}` : '/admin.html';
+            try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ verifier, state, returnTo })); } catch { return toast('Inloggen lukt niet in deze browser', 'Zet cookies en site-opslag aan.', 'error'); }
+            location.href = `${cfg.loginUrl}?redirect_uri=${encodeURIComponent(cfg.redirectUri)}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`;
+        }
+
+        // Terug van de loginpagina: code inwisselen en naar de oorspronkelijke pagina.
+        async function finishLogin() {
+            const params = new URLSearchParams(location.search);
+            let saved = null;
+            try { saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY)); sessionStorage.removeItem(STORAGE_KEY); } catch { /* geen opslag */ }
+            let target = '/admin.html';
+            if (saved && params.get('state') === saved.state && params.get('code')) {
+                const data = await api('/api/auth/callback', { code: params.get('code'), verifier: saved.verifier });
+                if (data.success) target = saved.returnTo || target;
+                else toast('Inloggen mislukt', data.message, 'error');
+            } else {
+                toast('Inloggen mislukt', 'De inlogpoging klopte niet meer. Probeer het nog eens.', 'error');
+            }
+            history.replaceState({}, '', target);
+        }
+
+        async function logout() {
+            await api('/api/auth/logout', {});
+            location.href = '/admin.html';
+        }
+        $('loginBtn').onclick = startLogin;
+        $('logoutBtn').onclick = logout;
+
+        // Elke aanroep die om een login vraagt, brengt de gebruiker terug naar het inlogscherm.
+        async function call(path, body) {
+            const data = await api(path, body);
+            if (data.needLogin) { $('account').classList.add('hidden'); showScreen('loginScreen'); }
+            return data;
+        }
+
+        // --- Mijn lotingen ---
+        async function showList() {
+            history.replaceState({}, '', '/admin.html');
+            const data = await call('/api/admin/lotteries');
+            if (!data.success) return;
+            $('myLotteries').innerHTML = data.lotteries.map(l => `
+                <li><a class="list-link" href="/admin/${esc(l.eventUrl)}"><b>${esc(l.eventName)}</b>
+                <small>${l.created ? new Date(l.created).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</small></a></li>`).join('');
+            $('noLotteries').classList.toggle('hidden', data.lotteries.length > 0);
+            showScreen('listScreen');
+        }
+        document.addEventListener('click', e => { if (e.target.closest('[data-to-list]')) showList(); });
+        $('toListBtn').onclick = showList;
+
+        // --- Nieuwe loting: stap 1 ---
+        $('newBtn').onclick = () => { people = []; families = {}; familyMode = false; resetFamilyToggle(); renderPeople(); showScreen('setupScreen'); $('eventName').focus(); };
+        $('setupBack').onclick = showList;
         $('setupForm').addEventListener('submit', e => {
             e.preventDefault();
-            setup = {
-                eventName: $('eventName').value, adminUsername: $('adminUsername').value,
-                adminPassword: $('adminPassword').value, adminEmail: $('adminEmail').value
-            };
-            show('peopleScreen');
+            eventName = $('eventName').value;
+            showScreen('peopleScreen');
             $('nameInput').focus();
         });
-        $('toLogin').onclick = () => show('loginScreen');
-        $('toSetup').onclick = () => show('setupScreen');
-
-        $('loginForm').addEventListener('submit', async e => {
-            e.preventDefault();
-            const code = $('loginCode').value.trim();
-            const next = { username: $('loginUsername').value.trim(), password: $('loginPassword').value.trim() };
-            const data = await api('/api/admin/login', { eventUrl: code, ...next });
-            if (!data.success) return toast('Inloggen mislukt', data.message, 'error');
-            eventUrl = code;
-            creds = next;
-            history.replaceState({}, '', `/admin/${eventUrl}`);
-            await enterDashboard();
-        });
-
-        function logout(silent) {
-            creds = { username: '', password: '' };
-            people = []; families = {}; familyMode = false;
-            document.querySelectorAll('input').forEach(i => { i.value = ''; });
-            history.replaceState({}, '', '/admin.html');
-            eventUrl = null;
-            show('setupScreen');
-            if (!silent) toast('Uitgelogd');
-        }
-        $('logoutBtn').onclick = () => logout();
+        $('backBtn').onclick = () => showScreen('setupScreen');
 
         // --- Stap 2: deelnemers ---
-        function familyNames() { return [...new Set(Object.values(families))]; }
+        const familyNames = () => [...new Set(Object.values(families))];
+
+        function resetFamilyToggle() {
+            $('familyToggle').setAttribute('aria-pressed', familyMode);
+            $('familyField').classList.toggle('hidden', !familyMode);
+            $('familyInput').required = familyMode;
+        }
 
         function renderPeople() {
             $('familyList').innerHTML = familyNames().map(f => `<option value="${esc(f)}">`).join('');
@@ -221,9 +275,7 @@
             if (people.length && !(await askConfirm('Lijst wissen?', 'Als je van modus wisselt, begin je met een lege lijst.', 'Wis de lijst'))) return;
             people = []; families = {};
             familyMode = !familyMode;
-            $('familyToggle').setAttribute('aria-pressed', familyMode);
-            $('familyField').classList.toggle('hidden', !familyMode);
-            $('familyInput').required = familyMode;
+            resetFamilyToggle();
             renderPeople();
             $('nameInput').focus();
         };
@@ -260,36 +312,44 @@
             if ($('familyDialog').returnValue === 'ok' && value && editing) { families[editing] = value; renderPeople(); }
         });
 
-        $('backBtn').onclick = () => show('setupScreen');
-
         $('createBtn').onclick = async () => {
             if (!(await askConfirm('Loting aanmaken?', `Er wordt geloot voor ${people.length} mensen. Daarna kun je de namen niet meer wijzigen.`, 'Ja, maak aan'))) return;
             $('createBtn').disabled = true;
-            const data = await api('/api/admin/create', { ...setup, participants: people, families, familyMode });
+            const data = await call('/api/admin/create', { eventName, participants: people, families, familyMode });
             if (!data.success) { renderPeople(); return toast('Aanmaken mislukt', data.message, 'error'); }
-            eventUrl = data.eventUrl;
-            creds = { username: setup.adminUsername.trim(), password: setup.adminPassword.trim() };
-            history.pushState({}, '', `/admin/${eventUrl}`);
-            await enterDashboard();
+            history.pushState({}, '', `/admin/${data.eventUrl}`);
+            await openLottery(data.eventUrl);
             toast('Je loting staat klaar', data.message, 'success');
         };
 
         // --- Dashboard ---
-        async function enterDashboard() {
-            const ok = await loadDashboard();
-            if (!ok) return;
-            show('dashScreen');
-            joinRoom('join-event', eventUrl, {
-                'participant-viewed': loadDashboard,
-                'lottery-reset': () => { if (eventUrl) { toast('Loting verwijderd'); logout(true); } }
-            });
+        async function openLottery(code) {
+            const data = await call(`/api/admin/lottery/${code}`);
+            if (data.needLogin) return;
+            if (!data.success) {
+                if (data.claimable) { eventUrl = code; return showScreen('claimScreen'); }
+                if (data.message && /ander account/.test(data.message)) return showScreen('foreignScreen');
+                toast('Loting niet gevonden', data.message, 'error');
+                return showList();
+            }
+            eventUrl = code;
+            renderDashboard(data);
+            showScreen('dashScreen');
+            if (!socket) {
+                socket = joinRoom('join-event', code, {
+                    'participant-viewed': () => refreshDashboard(),
+                    'lottery-reset': () => { if (eventUrl) { toast('Loting verwijderd'); showList(); } }
+                });
+            } else socket.emit('join-event', code);
         }
 
-        async function loadDashboard() {
-            if (!eventUrl) return false;
-            const data = await api('/api/admin/config', auth());
-            if (!data.success) { toast('Kon de loting niet laden', data.message, 'error'); logout(true); return false; }
+        async function refreshDashboard() {
+            if (!eventUrl) return;
+            const data = await call(`/api/admin/lottery/${eventUrl}`);
+            if (data.success) renderDashboard(data);
+        }
 
+        function renderDashboard(data) {
             const total = data.participants.length;
             const done = data.viewedBy.length;
             const pct = total ? Math.round((done / total) * 100) : 0;
@@ -298,13 +358,11 @@
             $('progressText').textContent = done === total ? 'Iedereen heeft getrokken' : `${done} van ${total} hebben getrokken`;
             $('meter').style.setProperty('--pct', pct + '%');
             $('meter').setAttribute('aria-valuenow', pct);
-            $('shareUrl').value = `${location.origin}/event/${eventUrl}`;
-            $('adminUrl').value = `${location.origin}/admin/${eventUrl}`;
+            $('shareUrl').value = `${location.origin}/event/${data.eventUrl}`;
             const viewed = new Set(data.viewedBy);
             $('dashPeople').innerHTML = data.participants.map(p => `
                 <li><span class="who">${esc(p)}${data.familyMode && data.families[p] ? `<span class="chip">${esc(data.families[p])}</span>` : ''}</span>
                 ${viewed.has(p) ? '<span class="done">getrokken</span>' : '<span class="chip">wacht nog</span>'}</li>`).join('');
-            return true;
         }
 
         document.addEventListener('click', e => {
@@ -317,11 +375,23 @@
 
         $('deleteBtn').onclick = async () => {
             if (!(await askConfirm('Loting verwijderen?', 'Alle namen en lootjes worden gewist. Dit kan niet ongedaan worden gemaakt.', 'Ja, verwijder', true))) return;
-            const data = await api('/api/admin/delete', auth());
+            const code = eventUrl;
+            const data = await call('/api/admin/delete', { eventUrl: code });
             if (!data.success) return toast('Verwijderen mislukt', data.message, 'error');
-            logout(true);
+            eventUrl = null;
             toast('Loting verwijderd', '', 'success');
+            showList();
         };
+
+        // --- Oude loting koppelen ---
+        $('claimForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            const data = await call('/api/admin/claim', { eventUrl, username: $('claimUser').value, password: $('claimPass').value });
+            if (!data.success) return toast('Koppelen mislukt', data.message, 'error');
+            $('claimPass').value = '';
+            toast('Gekoppeld', 'Deze loting staat nu bij je account.', 'success');
+            openLottery(eventUrl);
+        });
 
         // --- Herstel ---
         $('recoveryBtn').onclick = () => {
@@ -332,17 +402,23 @@
         $('recoveryCreate').onclick = async () => {
             const recoveryEmail = $('recoveryEmail').value.trim();
             if (!recoveryEmail) return toast('Vul een e-mailadres in', '', 'error');
-            const data = await api('/api/recovery/create', { ...auth(), recoveryEmail });
+            const data = await call('/api/recovery/create', { eventUrl, recoveryEmail });
             if (!data.success) return toast('Link maken mislukt', data.message, 'error');
             $('recoveryUrl').value = data.fullUrl;
             $('recoveryResult').classList.remove('hidden');
         };
-
         $('recoveryEmail').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('recoveryCreate').click(); } });
 
         // --- Start ---
-        if (pathCode) { $('loginCode').value = pathCode; show('loginScreen'); $('loginUsername').focus(); }
-        else show('setupScreen');
+        (async function init() {
+            if (location.pathname === '/auth/callback') await finishLogin();
+            const me = await api('/api/auth/me');
+            if (!me.loggedIn) return showScreen('loginScreen');
+            $('accountEmail').textContent = me.email;
+            $('account').classList.remove('hidden');
+            if (pathCode || /^\/admin\/[a-f0-9]{16}$/.test(location.pathname)) openLottery(location.pathname.split('/')[2]);
+            else showList();
+        })();
         renderPeople();
     </script>
 </body>

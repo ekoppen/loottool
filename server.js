@@ -4,6 +4,7 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const { Server } = require('socket.io');
 const store = require('./store');
+const auth = require('./auth');
 const { createAssignments } = require('./assign');
 
 const app = express();
@@ -62,16 +63,15 @@ const mailFrame = body => `
         <p style="color: #8a7a68; font-size: 12px;">Automatisch bericht van Sinterklaas Lootjes.</p>
     </div>`;
 
-// Onderwerp is vast en het wachtwoord staat er bewust niet in: de maker kent het al.
-function sendAdminCredentialsEmail(email, eventName, eventUrl, username, ip) {
+// Onderwerp is vast. De mail gaat naar het adres van het ingelogde account en bevat alleen links.
+function sendLotteryReadyEmail(email, eventName, eventUrl, ip) {
     const adminUrl = `${baseUrl()}/admin/${eventUrl}`;
     const participantUrl = `${baseUrl()}/event/${eventUrl}`;
     return sendMail('create', email, 'Je Sinterklaas Lootjes-loting staat klaar', mailFrame(`
         <h2>Je loting "${esc(eventName)}" staat klaar</h2>
-        <p><strong>Gebruikersnaam:</strong> ${esc(username)}<br>Het wachtwoord is het wachtwoord dat je zelf hebt gekozen.</p>
-        <p><strong>Beheerlink:</strong><br><a href="${esc(adminUrl)}">${esc(adminUrl)}</a></p>
+        <p><strong>Beheerlink (alleen voor jou):</strong><br><a href="${esc(adminUrl)}">${esc(adminUrl)}</a></p>
         <p><strong>Link voor deelnemers:</strong><br><a href="${esc(participantUrl)}">${esc(participantUrl)}</a></p>
-        <p style="color: #8a7a68;">Bewaar deze mail: je hebt de gegevens nodig om je loting te beheren.</p>`), ip);
+        <p style="color: #8a7a68;">Log in met je account om de loting te beheren.</p>`), ip);
 }
 
 function sendRecoveryEmail(email, eventName, recipientName, ip) {
@@ -122,39 +122,72 @@ io.on('connection', socket => {
     socket.on('join-recovery', code => isCode(code) && socket.join(`recovery:${code}`));
 });
 
-// --- Admin ---
-async function authAdmin(req, res) {
-    const { eventUrl, username, password } = req.body;
-    if (!isCode(eventUrl) || typeof username !== 'string' || typeof password !== 'string') {
-        fail(res, 400, 'Alle velden zijn verplicht');
-        return false;
+// --- Inloggen ---
+app.get('/auth/callback', page('admin.html'));
+app.get('/api/auth/config', (req, res) => res.json(auth.clientConfig()));
+app.get('/api/auth/me', (req, res) => {
+    const user = auth.userFrom(req);
+    res.json({ loggedIn: !!user, email: user ? user.email : null });
+});
+
+app.post('/api/auth/callback', strict, wrap(async (req, res) => {
+    const { code, verifier } = req.body;
+    if (typeof code !== 'string' || typeof verifier !== 'string' || code.length > 500 || verifier.length > 200) {
+        return fail(res, 400, 'Ongeldige aanvraag');
     }
-    if (!(await store.verifyAdmin(eventUrl, username.trim(), password.trim()))) {
-        fail(res, 401, 'Ongeldige inloggegevens');
-        return false;
+    const user = await auth.exchangeCode(code, verifier);
+    if (!user) return fail(res, 401, 'Inloggen is niet gelukt. Probeer het nog eens.');
+    auth.setSession(res, user);
+    res.json({ success: true, email: user.email });
+}));
+
+app.post('/api/auth/logout', (req, res) => {
+    auth.clearSession(res);
+    res.json({ success: true });
+});
+
+// --- Admin (alleen voor de eigenaar van de loting) ---
+const needUser = (req, res, next) => {
+    const user = auth.userFrom(req);
+    if (!user) return res.status(401).json({ success: false, needLogin: true, message: 'Log eerst in.' });
+    req.user = user;
+    next();
+};
+
+// Geeft de loting terug als de ingelogde gebruiker de eigenaar is; anders is het antwoord al verstuurd.
+async function ownLottery(req, res, eventUrl) {
+    const lottery = isCode(eventUrl) ? await store.getLottery(eventUrl) : null;
+    if (!lottery) { fail(res, 404, 'Loting niet gevonden'); return null; }
+    if (!store.isOwner(lottery, req.user.id)) {
+        res.status(403).json({ success: false, claimable: store.isClaimable(lottery), message: 'Deze loting hoort bij een ander account.' });
+        return null;
     }
-    return true;
+    return lottery;
 }
 
-app.post('/api/admin/login', strict, wrap(async (req, res) => {
-    if (await authAdmin(req, res)) res.json({ success: true });
+app.get('/api/admin/lotteries', needUser, wrap(async (req, res) => {
+    res.json({ success: true, lotteries: await store.listLotteries(req.user.id) });
 }));
 
-app.post('/api/admin/config', strict, wrap(async (req, res) => {
-    if (!(await authAdmin(req, res))) return;
-    res.json({ success: true, ...(await store.getLotteryData(req.body.eventUrl)) });
+app.get('/api/admin/lottery/:eventUrl', needUser, wrap(async (req, res) => {
+    if (!(await ownLottery(req, res, req.params.eventUrl))) return;
+    res.json({ success: true, ...(await store.getLotteryData(req.params.eventUrl)) });
 }));
 
-app.post('/api/admin/create', strict, wrap(async (req, res) => {
-    const { adminEmail, familyMode } = req.body;
-    const eventName = cleanText(req.body.eventName, 80);
-    const adminUsername = cleanText(req.body.adminUsername, 40);
-    const adminPassword = typeof req.body.adminPassword === 'string' ? req.body.adminPassword.trim() : '';
-
-    if (!eventName || !adminUsername || adminPassword.length < 4 || adminPassword.length > 200) {
-        return fail(res, 400, 'Loting-naam, gebruikersnaam en een wachtwoord van minimaal 4 tekens zijn verplicht');
+// Oude loting (van vóór accounts) koppelen aan het ingelogde account met de oude inloggegevens.
+app.post('/api/admin/claim', needUser, strict, wrap(async (req, res) => {
+    const { eventUrl, username, password } = req.body;
+    if (!isCode(eventUrl) || typeof username !== 'string' || typeof password !== 'string') return fail(res, 400, 'Alle velden zijn verplicht');
+    if (!(await store.claimLottery(eventUrl, req.user, username.trim(), password.trim()))) {
+        return fail(res, 401, 'Deze gegevens kloppen niet, of de loting is al gekoppeld aan een account.');
     }
-    if (adminEmail && !isEmail(adminEmail)) return fail(res, 400, 'Ongeldig e-mailadres');
+    res.json({ success: true });
+}));
+
+app.post('/api/admin/create', needUser, strict, wrap(async (req, res) => {
+    const { familyMode } = req.body;
+    const eventName = cleanText(req.body.eventName, 80);
+    if (!eventName) return fail(res, 400, 'Geef je loting een naam');
 
     const names = Array.isArray(req.body.participants) ? req.body.participants.map(n => cleanText(n, 40)) : [];
     if (names.length < MIN_PARTICIPANTS || names.length > MAX_PARTICIPANTS || names.includes(null)) {
@@ -179,25 +212,21 @@ app.post('/api/admin/create', strict, wrap(async (req, res) => {
     if (!assignments) return fail(res, 400, 'Kon geen geldige verdeling maken. Controleer de gezinsverdeling.');
 
     const eventUrl = await store.createLottery({
-        eventName, adminUsername, adminPassword, participants: names, families, familyMode: !!familyMode, assignments
+        eventName, owner: req.user, participants: names, families, familyMode: !!familyMode, assignments
     });
-
-    let mailed = false;
-    if (adminEmail && adminEmail.trim()) {
-        mailed = await sendAdminCredentialsEmail(adminEmail.trim(), eventName, eventUrl, adminUsername, req.ip);
-    }
+    const mailed = await sendLotteryReadyEmail(req.user.email, eventName, eventUrl, req.ip);
 
     res.json({
         success: true,
-        message: mailed ? 'Loting aangemaakt! Check je e-mail voor de inloggegevens.' : 'Loting aangemaakt!',
+        message: mailed ? `Loting aangemaakt! De links staan ook in je mail (${req.user.email}).` : 'Loting aangemaakt!',
         eventUrl,
         adminUrl: `/admin/${eventUrl}`,
         participantUrl: `/event/${eventUrl}`
     });
 }));
 
-app.post('/api/admin/delete', strict, wrap(async (req, res) => {
-    if (!(await authAdmin(req, res))) return;
+app.post('/api/admin/delete', needUser, strict, wrap(async (req, res) => {
+    if (!(await ownLottery(req, res, req.body.eventUrl))) return;
     await store.deleteLottery(req.body.eventUrl);
     io.to(`event:${req.body.eventUrl}`).emit('lottery-reset');
     res.json({ success: true, message: 'Loting verwijderd' });
@@ -248,13 +277,12 @@ app.get('/api/status', wrap(async (req, res) => {
 }));
 
 // --- Herstel ---
-app.post('/api/recovery/create', strict, wrap(async (req, res) => {
-    if (!(await authAdmin(req, res))) return;
+app.post('/api/recovery/create', needUser, strict, wrap(async (req, res) => {
+    if (!(await ownLottery(req, res, req.body.eventUrl))) return;
     if (!isEmail(req.body.recoveryEmail)) return fail(res, 400, 'Voer een geldig e-mailadres in');
     if (!emailTransporter) return fail(res, 503, 'E-mail is niet ingesteld op de server, herstel kan dus geen mail sturen.');
 
     const recoveryUrl = await store.createRecoverySession(req.body.eventUrl, req.body.recoveryEmail.trim());
-    if (!recoveryUrl) return fail(res, 404, 'Loting niet gevonden');
     res.json({ success: true, recoveryUrl, fullUrl: `${baseUrl()}/recovery/${recoveryUrl}` });
 }));
 
@@ -307,6 +335,7 @@ app.use((err, req, res, next) => {
 
 if (require.main === module) {
     store.assertConfigured();
+    auth.assertConfigured();
     server.listen(PORT, '0.0.0.0', () => {
         console.log(`Sinterklaas Lootjes draait op http://0.0.0.0:${PORT} (backend: Apenkaas)`);
         console.log(emailTransporter ? 'E-mail ingesteld' : 'E-mail niet ingesteld: herstel-mails en inlogmails staan uit');

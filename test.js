@@ -25,11 +25,17 @@ const fake = http.createServer((req, res) => {
     req.on('data', c => (raw += c));
     req.on('end', () => {
         const send = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
-        if (req.headers.authorization !== 'ApiKey testkey') return send(401, { message: 'nee' });
+        if (req.headers.authorization !== 'ApiKey testkey' && !/\/(oauth\/token|logout)$/.test(req.url)) return send(401, { message: 'nee' });
         const url = new URL(req.url, 'http://x');
         const body = raw ? JSON.parse(raw) : {};
-        const m = url.pathname.match(/^\/api\/t1\/(?:collections\/([^/]+)\/documents(?:\/([^/]+))?|(transactions))$/);
+        const m = url.pathname.match(/^\/api\/t1\/(?:collections\/([^/]+)\/documents(?:\/([^/]+))?|(transactions)|(oauth\/token)|(logout))$/);
         try {
+            if (m && m[4]) { // oauth/token: code 'good' = gebruiker u1, 'other' = u2
+                const users = { good: { id: 'u1', email: 'a@b.nl' }, other: { id: 'u2', email: 'c@d.nl' } };
+                const user = body.app_id === 'app1' && body.redirect_uri === 'http://localhost:3000/auth/callback' && body.code_verifier && users[body.code];
+                return user ? send(200, { accessToken: 'x', refreshToken: 'r', user }) : send(400, { error: 'invalid_grant' });
+            }
+            if (m && m[5]) return send(200, { ok: true });
             if (m && m[3]) {
                 const snapshot = Object.fromEntries(Object.entries(docs).map(([k, v]) => [k, new Map(v)]));
                 try {
@@ -73,72 +79,97 @@ test('verdeling: onmogelijke situatie geeft null', () => {
 });
 
 // --- API ---
-test('hele flow: aanmaken, trekken, herstel en verwijderen', async t => {
+test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen', async t => {
     await new Promise(r => fake.listen(0, r));
     Object.assign(process.env, {
         APENKAAS_URL: `http://127.0.0.1:${fake.address().port}`, APENKAAS_TENANT: 't1', APENKAAS_KEY: 'testkey',
         APENKAAS_LOTEN_COLLECTION_ID: 'loten', APENKAAS_DEELNEMERS_COLLECTION_ID: 'deelnemers',
-        APENKAAS_HERSTEL_COLLECTION_ID: 'herstel', APENKAAS_HERSTEL_KLIKS_COLLECTION_ID: 'kliks'
+        APENKAAS_HERSTEL_COLLECTION_ID: 'herstel', APENKAAS_HERSTEL_KLIKS_COLLECTION_ID: 'kliks',
+        APENKAAS_APP_ID: 'app1', SESSION_SECRET: 'x'.repeat(40), BASE_URL: 'http://localhost:3000'
     });
+    const store = require('./store');
     const { server } = require('./server');
     await new Promise(r => server.listen(0, r));
     const base = `http://127.0.0.1:${server.address().port}`;
     t.after(() => { server.close(); fake.close(); server.closeAllConnections?.(); });
 
-    const post = async (path, body) => {
-        const res = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        return { status: res.status, ...(await res.json()) };
+    const call = async (method, path, body, cookie) => {
+        const res = await fetch(base + path, {
+            method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+            body: body ? JSON.stringify(body) : undefined
+        });
+        const set = res.headers.get('set-cookie');
+        return { status: res.status, cookie: set ? set.split(';')[0] : null, ...(await res.json()) };
     };
+    const login = async code => (await call('POST', '/api/auth/callback', { code, verifier: 'v'.repeat(50) })).cookie;
     const names = ['Anna', 'Bram', 'Cor', 'Dirk'];
-    const admin = { username: 'baas', password: 'geheim' };
-
-    // validatie
-    assert.equal((await post('/api/admin/create', { eventName: 'X', adminUsername: 'baas', adminPassword: 'geheim', participants: ['A', 'a', 'B'] })).status, 400);
-    assert.equal((await post('/api/admin/create', { eventName: 'X', adminUsername: 'baas', adminPassword: 'geheim', participants: ['A', 'B'] })).status, 400);
-
-    const created = await post('/api/admin/create', { eventName: '<b>Test</b>', adminUsername: 'baas', adminPassword: 'geheim', participants: names });
-    assert.ok(created.success, created.message);
-    const { eventUrl } = created;
-
-    // wachtwoord staat niet leesbaar in de opslag
-    const stored = [...docs.loten.values()][0].data;
-    assert.ok(!JSON.stringify(stored).includes('geheim'));
 
     // inloggen
-    assert.equal((await post('/api/admin/login', { eventUrl, username: 'baas', password: 'fout' })).status, 401);
-    assert.ok((await post('/api/admin/login', { eventUrl, ...admin })).success);
-    assert.equal((await post('/api/admin/config', { eventUrl, username: 'baas', password: 'fout' })).status, 401);
+    assert.equal((await call('GET', '/api/auth/me')).loggedIn, false);
+    assert.equal((await call('POST', '/api/auth/callback', { code: 'fout', verifier: 'v'.repeat(50) })).status, 401);
+    const alice = await login('good');
+    const bob = await login('other');
+    assert.ok(alice && bob);
+    assert.equal((await call('GET', '/api/auth/me', null, alice)).email, 'a@b.nl');
+    assert.equal((await call('GET', '/api/auth/me', null, alice.slice(0, -3) + 'abc')).loggedIn, false); // vervalst
 
-    // loting zonder eventUrl lekt niets
-    assert.equal((await fetch(`${base}/api/status`).then(r => r.json())).exists, false);
-    assert.equal((await post('/api/draw', { name: 'Anna' })).status, 404);
+    // aanmaken vereist een account en geldige invoer
+    assert.equal((await call('POST', '/api/admin/create', { eventName: 'X', participants: names })).status, 401);
+    assert.equal((await call('POST', '/api/admin/create', { eventName: 'X', participants: ['A', 'a', 'B'] }, alice)).status, 400);
+    assert.equal((await call('POST', '/api/admin/create', { eventName: 'X', participants: ['A', 'B'] }, alice)).status, 400);
+    const created = await call('POST', '/api/admin/create', { eventName: '<b>Test</b>', participants: names }, alice);
+    assert.ok(created.success, created.message);
+    const { eventUrl } = created;
+    const stored = [...docs.loten.values()].find(d => d.data.eventUrl === eventUrl).data;
+    assert.equal(stored.ownerId, 'u1');
+    assert.equal(stored.adminHash, undefined);
 
-    // trekken (hoofdletterongevoelig) en status
-    const draw = await post('/api/draw', { name: 'anna', eventUrl });
+    // alleen de eigenaar beheert
+    assert.equal((await call('GET', '/api/admin/lotteries', null, alice)).lotteries.length, 1);
+    assert.equal((await call('GET', '/api/admin/lotteries', null, bob)).lotteries.length, 0);
+    assert.equal((await call('GET', `/api/admin/lottery/${eventUrl}`, null, alice)).participants.length, 4);
+    const foreign = await call('GET', `/api/admin/lottery/${eventUrl}`, null, bob);
+    assert.equal(foreign.status, 403);
+    assert.equal(foreign.claimable, false);
+    assert.equal((await call('GET', `/api/admin/lottery/${eventUrl}`)).status, 401);
+
+    // trekken: publiek, alleen met loting-code
+    assert.equal((await call('GET', '/api/status')).exists, false);
+    assert.equal((await call('POST', '/api/draw', { name: 'Anna' })).status, 404);
+    const draw = await call('POST', '/api/draw', { name: 'anna', eventUrl });
     assert.ok(draw.success);
     assert.equal(draw.giver, 'Anna');
     assert.notEqual(draw.recipient, 'Anna');
-    const status = await fetch(`${base}/api/status?eventUrl=${eventUrl}`).then(r => r.json());
-    assert.deepEqual(status.viewedBy, ['Anna']);
-    assert.equal((await post('/api/draw', { name: 'Niemand', eventUrl })).status, 404);
+    assert.deepEqual((await call('GET', `/api/status?eventUrl=${eventUrl}`)).viewedBy, ['Anna']);
+    assert.equal((await call('POST', '/api/draw', { name: 'Niemand', eventUrl })).status, 404);
 
     // gelijktijdig trekken: precies één verzoek krijgt het lootje
-    const racers = await Promise.all([1, 2, 3, 4].map(() => post('/api/draw', { name: 'Bram', eventUrl })));
+    const racers = await Promise.all([1, 2, 3, 4].map(() => call('POST', '/api/draw', { name: 'Bram', eventUrl })));
     assert.equal(racers.filter(r => r.success).length, 1);
     assert.equal(racers.filter(r => r.status === 409 && r.recipient === undefined).length, 3);
+    assert.equal((await call('POST', '/api/draw', { name: 'Anna', eventUrl })).status, 409);
 
-    // een tweede keer trekken geeft het lootje niet nog eens prijs
-    const again = await post('/api/draw', { name: 'Anna', eventUrl });
-    assert.equal(again.status, 409);
-    assert.equal(again.recipient, undefined);
+    // oude loting koppelen met de oude gegevens
+    const oldUrl = 'b'.repeat(16);
+    fakeCreate('loten', { eventUrl: oldUrl, eventName: 'Oud', adminUsername: 'eelko', adminHash: store.hashPassword('oudww'), familyMode: false });
+    const legacy = await call('GET', `/api/admin/lottery/${oldUrl}`, null, bob);
+    assert.equal(legacy.status, 403);
+    assert.equal(legacy.claimable, true);
+    assert.equal((await call('POST', '/api/admin/claim', { eventUrl: oldUrl, username: 'eelko', password: 'fout' }, bob)).status, 401);
+    assert.ok((await call('POST', '/api/admin/claim', { eventUrl: oldUrl, username: 'eelko', password: 'oudww' }, bob)).success);
+    assert.equal((await call('GET', `/api/admin/lottery/${oldUrl}`, null, bob)).eventName, 'Oud');
+    assert.equal((await call('POST', '/api/admin/claim', { eventUrl: oldUrl, username: 'eelko', password: 'oudww' }, alice)).status, 401); // al gekoppeld
 
-    // herstel: zonder mailconfiguratie weigert de server netjes
-    const rec = await post('/api/recovery/create', { eventUrl, ...admin, recoveryEmail: 'a@b.nl' });
-    assert.equal(rec.status, 503);
+    // herstel: alleen de eigenaar; zonder mailconfiguratie weigert de server netjes
+    assert.equal((await call('POST', '/api/recovery/create', { eventUrl, recoveryEmail: 'a@b.nl' }, bob)).status, 403);
+    assert.equal((await call('POST', '/api/recovery/create', { eventUrl, recoveryEmail: 'a@b.nl' }, alice)).status, 503);
 
-    // verwijderen ruimt alles op
-    assert.equal((await post('/api/admin/delete', { eventUrl, username: 'baas', password: 'fout' })).status, 401);
-    assert.ok((await post('/api/admin/delete', { eventUrl, ...admin })).success);
-    assert.equal([...docs.loten.values()].length + [...docs.deelnemers.values()].length, 0);
-    assert.equal((await fetch(`${base}/api/status?eventUrl=${eventUrl}`).then(r => r.json())).exists, false);
+    // verwijderen: alleen de eigenaar, en het ruimt alles op
+    assert.equal((await call('POST', '/api/admin/delete', { eventUrl }, bob)).status, 403);
+    assert.ok((await call('POST', '/api/admin/delete', { eventUrl }, alice)).success);
+    assert.equal([...docs.deelnemers.values()].filter(d => d.data.eventUrl === eventUrl).length, 0);
+    assert.equal((await call('GET', `/api/status?eventUrl=${eventUrl}`)).exists, false);
+
+    // uitloggen wist de cookie
+    assert.match((await fetch(base + '/api/auth/logout', { method: 'POST' })).headers.get('set-cookie'), /Max-Age=0/);
 });

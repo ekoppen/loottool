@@ -5,8 +5,10 @@
       "schema": [
         { "key": "eventUrl", "type": "string", "required": true },
         { "key": "eventName", "type": "string", "required": true },
-        { "key": "adminUsername", "type": "string", "required": true },
-        { "key": "adminHash", "type": "string", "required": true },
+        { "key": "ownerId", "type": "string" },
+        { "key": "ownerEmail", "type": "string" },
+        { "key": "adminUsername", "type": "string" },
+        { "key": "adminHash", "type": "string" },
         { "key": "familyMode", "type": "boolean" },
         { "key": "createdAt", "type": "string" }
       ],
