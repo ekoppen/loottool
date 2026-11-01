@@ -44,16 +44,23 @@ function mailAllowed(kind, to, ip) {
     if (OPEN_KINDS.includes(kind) && sentMail.filter(m => OPEN_KINDS.includes(m.kind)).length >= OPEN_CAP) return false;
     if (ofKind.filter(m => m.to === addr).length >= 3) return false;
     if (ip && ofKind.filter(m => m.ip === ip).length >= 5) return false;
-    sentMail.push({ kind, to: addr, ip, at: Date.now() });
-    return true;
+    const slot = { kind, to: addr, ip, at: Date.now() };
+    sentMail.push(slot);
+    return slot;
 }
 
 async function sendMail(kind, to, subject, html, ip) {
-    if (!mail.transporter || !mailAllowed(kind, to, ip)) return false;
+    if (!mail.transporter) return false;
+    const slot = mailAllowed(kind, to, ip);
+    if (!slot) return false;
     try {
         await mail.transporter.sendMail({ from: process.env.GMAIL_USER, to, subject, html });
         return true;
     } catch (error) {
+        // Een mislukte verzending telt niet mee voor het budget: er is niets verstuurd, en anders blokkeren
+        // herhaalpogingen (bijvoorbeeld van Apenkaas) de mail nog een uur nadat de storing is verholpen.
+        const i = sentMail.indexOf(slot);
+        if (i >= 0) sentMail.splice(i, 1);
         console.error('Mail versturen mislukt:', error.message);
         return false;
     }

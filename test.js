@@ -300,6 +300,12 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     mail.transporter = { sendMail: async () => { throw new Error('smtp stuk'); } };
     assert.equal((await hook(reset)).status, 503);                                  // mail mislukt: Apenkaas probeert later opnieuw
 
+    // een storing bij het versturen telt niet mee voor het budget: na herstel kan de mail weer weg
+    const storing = { ...reset, data: { ...reset.data, email: 'storing@example.nl' } };
+    for (let i = 0; i < 5; i++) assert.equal((await hook(storing)).status, 503);
+    mail.transporter = { sendMail: async () => {} };
+    assert.ok((await hook(storing)).success);
+
     // open mailsoorten (aanmaken, wachtwoord vergeten) kunnen de herstelmail niet uithongeren
     mail.transporter = { sendMail: async () => {} };
     let accepted = 0;
@@ -310,7 +316,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     }
     assert.ok(accepted <= 20, `open budget overschreden: ${accepted}`);
     assert.equal(mailAllowed('create', 'nieuw@example.nl'), false);                 // aanmaakmail deelt hetzelfde budget
-    assert.equal(mailAllowed('recovery', 'herstel@example.nl'), true);              // herstelmail blijft mogelijk
+    assert.ok(mailAllowed('recovery', 'herstel@example.nl'));              // herstelmail blijft mogelijk
 
     // uitloggen wist de cookie
     assert.match((await fetch(base + '/api/auth/logout', { method: 'POST' })).headers.get('set-cookie'), /Max-Age=0/);
