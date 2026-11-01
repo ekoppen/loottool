@@ -52,6 +52,11 @@
             <form id="setupForm" class="stack">
                 <div class="field"><label for="eventName">Naam van de loting</label>
                     <input id="eventName" maxlength="80" placeholder="Familie Jansen 2026" required></div>
+                <div id="reuseField" class="field hidden">
+                    <label for="reuseSelect">Begin met de namen van een eerdere loting</label>
+                    <select id="reuseSelect"><option value="">Nee, ik begin leeg</option></select>
+                    <small>Namen en gezinnen komen in de volgende stap al klaar te staan. Je kunt ze daar nog aanpassen.</small>
+                </div>
                 <button class="btn btn-block" type="submit">Verder naar deelnemers</button>
                 <button id="setupBack" class="btn btn-ghost btn-block" type="button">Terug</button>
             </form>
@@ -64,11 +69,6 @@
             <p class="lead">Voeg minimaal 3 mensen toe.</p>
 
             <div class="stack">
-                <div id="reuseField" class="field hidden">
-                    <label for="reuseSelect">Begin met de namen van een eerdere loting</label>
-                    <select id="reuseSelect"><option value="">Nee, ik begin leeg</option></select>
-                    <small>Namen en gezinnen worden overgenomen. Je kunt ze daarna nog aanpassen.</small>
-                </div>
                 <button id="familyToggle" class="toggle" type="button" aria-pressed="false">
                     <span class="switch"></span>
                     <span>Gezinsmodus: mensen uit hetzelfde gezin trekken elkaar niet</span>
@@ -271,7 +271,8 @@
             knownLotteries = data.lotteries;
             $('myLotteries').innerHTML = data.lotteries.map(l => `
                 <li><a class="list-link" href="/admin/${esc(l.eventUrl)}"><b>${esc(l.eventName)}</b>
-                <small>${l.created ? new Date(l.created).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</small></a></li>`).join('');
+                <small>${l.created ? new Date(l.created).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</small></a>
+                <button class="btn btn-small btn-ghost" type="button" data-reuse="${esc(l.eventUrl)}">Nieuw met deze namen</button></li>`).join('');
             $('noLotteries').classList.toggle('hidden', data.lotteries.length > 0);
             showScreen('listScreen');
         }
@@ -279,7 +280,8 @@
         $('toListBtn').onclick = showList;
 
         // --- Nieuwe loting: stap 1 ---
-        $('newBtn').onclick = () => { people = []; families = {}; familyMode = false; resetFamilyToggle(); renderPeople(); renderReuse(); showScreen('setupScreen'); $('eventName').focus(); };
+        function startNewLottery() { people = []; families = {}; familyMode = false; resetFamilyToggle(); renderPeople(); renderReuse(); showScreen('setupScreen'); $('eventName').focus(); }
+        $('newBtn').onclick = startNewLottery;
         $('setupBack').onclick = showList;
         $('setupForm').addEventListener('submit', e => {
             e.preventDefault();
@@ -360,22 +362,32 @@
             $('reuseField').classList.toggle('hidden', knownLotteries.length === 0);
         }
 
-        $('reuseSelect').addEventListener('change', async () => {
-            const code = $('reuseSelect').value;
-            if (!code) return;
-            if (people.length && !(await askConfirm('Lijst vervangen?', 'De namen die je al hebt toegevoegd worden vervangen door die van de eerdere loting.', 'Vervang'))) {
-                $('reuseSelect').value = '';
-                return;
-            }
+        // Haalt de namen en gezinnen van een eerdere loting op en zet ze klaar voor de volgende stap.
+        async function reuseNames(code) {
+            if (people.length && !(await askConfirm('Lijst vervangen?', 'De namen die je al hebt toegevoegd worden vervangen door die van de eerdere loting.', 'Vervang'))) return false;
             const data = await call(`/api/admin/lottery/${code}`);
-            $('reuseSelect').value = '';
-            if (!data.success) return toast('Namen ophalen mislukt', data.message, 'error');
+            if (!data.success) { toast('Namen ophalen mislukt', data.message, 'error'); return false; }
             people = [...data.participants];
             families = { ...data.families };
             familyMode = !!data.familyMode;
             resetFamilyToggle();
             renderPeople();
-            toast('Namen overgenomen', `${people.length} deelnemers. Pas ze zo nodig nog aan.`, 'success');
+            toast('Namen overgenomen', `${people.length} deelnemers staan klaar in de volgende stap.`, 'success');
+            return true;
+        }
+
+        $('reuseSelect').addEventListener('change', async () => {
+            const code = $('reuseSelect').value;
+            if (code) await reuseNames(code);
+            $('reuseSelect').value = '';
+        });
+
+        // Knop "Nieuw met deze namen" in het lijstje met lotingen.
+        $('myLotteries').addEventListener('click', async e => {
+            const btn = e.target.closest('[data-reuse]');
+            if (!btn) return;
+            startNewLottery();
+            await reuseNames(btn.dataset.reuse);
         });
 
         $('createBtn').onclick = async () => {
