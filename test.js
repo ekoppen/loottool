@@ -111,7 +111,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
         APENKAAS_URL: `http://127.0.0.1:${fake.address().port}`, APENKAAS_TENANT: 't1', APENKAAS_KEY: 'testkey',
         APENKAAS_LOTEN_COLLECTION_ID: 'loten', APENKAAS_DEELNEMERS_COLLECTION_ID: 'deelnemers',
         APENKAAS_HERSTEL_COLLECTION_ID: 'herstel', APENKAAS_HERSTEL_KLIKS_COLLECTION_ID: 'kliks',
-        RATE_LIMIT_STRICT: '1000', APENKAAS_ACHTERGRONDEN_BUCKET_ID: 'bucket1', APENKAAS_APP_ID: 'app1', SESSION_SECRET: 'x'.repeat(40), BASE_URL: 'http://localhost:3000'
+        RATE_LIMIT_STRICT: '1000', ACCOUNT_LIMIT_PER_HOUR: '8', APENKAAS_ACHTERGRONDEN_BUCKET_ID: 'bucket1', APENKAAS_APP_ID: 'app1', SESSION_SECRET: 'x'.repeat(40), BASE_URL: 'http://localhost:3000'
     });
     const store = require('./store');
     const auth = require('./auth');
@@ -208,12 +208,26 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     assert.equal(registered.has('ander@example.nl'), false);                          // geen account voor een vergeven lootje
     assert.ok((await claim({ claimToken: draw.claimToken }, annaCookie)).success);   // zelfde account nog eens: prima
 
+    // andere getekende tokens zijn geen sessie, ook al delen ze de sleutel
+    const asCookie = token => `lootjes_sessie=${token}`;
+    for (const token of [draw.claimToken, auth.signToken({ uid: 'x', email: 'a@b.nl' }, 600), auth.signToken({ p: 'claim', uid: 'x', email: 'a@b.nl' }, 600)]) {
+        assert.equal((await call('GET', '/api/auth/me', null, asCookie(token))).loggedIn, false);
+        assert.equal((await call('GET', '/api/admin/lotteries', null, asCookie(token))).status, 401);
+    }
+    assert.equal((await call('GET', '/api/auth/me', null, asCookie(auth.signToken({ p: 'session', uid: 'x', email: 'a@b.nl' }, 600)))).loggedIn, true);
+
     // zonder wachtwoord: account met willekeurig wachtwoord, mail om er zelf een te kiezen, niet ingelogd
     const cor = await call('POST', '/api/draw', { name: 'Cor', eventUrl });
     const noPass = await claim({ claimToken: cor.claimToken, email: 'cor@example.nl' });
     assert.ok(noPass.success && !noPass.loggedIn && noPass.mailRequested && !noPass.cookie);
     assert.ok(lastRegisterPassword.length >= 8 && lastRegisterPassword !== 'langgenoeg1');
     assert.ok(resetRequests.includes('cor@example.nl'));
+
+    // te veel pogingen zonder account vanaf één IP per uur
+    const attempts = [];
+    for (let i = 0; i < 3; i++) attempts.push((await claim({ claimToken: draw.claimToken, email: `extra${i}@example.nl`, password: 'langgenoeg1' })).status);
+    assert.deepEqual(attempts, [409, 409, 429]);
+    assert.equal(registered.has('extra0@example.nl'), false);
 
     // al ingelogd: het lootje gaat naar dat account, zonder e-mail
     const dirk = await call('POST', '/api/draw', { name: 'Dirk', eventUrl });

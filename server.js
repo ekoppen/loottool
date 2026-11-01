@@ -89,12 +89,12 @@ function sendLotteryReadyEmail(email, eventName, eventUrl, ip) {
 }
 
 // Melding naar het opgegeven adres: iedereen kan een adres intypen, dus de eigenaar moet het kunnen merken.
-function sendAccountCreatedEmail(email) {
+function sendAccountCreatedEmail(email, ip) {
     return sendMail('account', email, 'Je account bij Sinterklaas Lootjes', mailFrame(`
         <h2>Je account is aangemaakt</h2>
         <p>Met dit e-mailadres is een account gemaakt bij Sinterklaas Lootjes, om een lootje te bewaren. Je ziet het terug via
         <a href="${esc(baseUrl())}/mijn-lootjes">${esc(baseUrl())}/mijn-lootjes</a>.</p>
-        <p style="color: #8a7a68;">Was jij dit niet? Dan heeft iemand dit adres gebruikt. Kies via "Wachtwoord vergeten" op de loginpagina een eigen wachtwoord, dan heb jij het account in handen.</p>`));
+        <p style="color: #8a7a68;">Was jij dit niet? Dan heeft iemand dit adres gebruikt. Kies via "Wachtwoord vergeten" op de loginpagina een eigen wachtwoord, dan heb jij het account in handen.</p>`), ip);
 }
 
 function sendPasswordResetEmail(email, name, resetUrl) {
@@ -131,6 +131,16 @@ function rateLimit(max) {
     };
 }
 const strict = rateLimit(Number(process.env.RATE_LIMIT_STRICT) || 30); // per minuut per IP; env alleen voor tests
+
+// Pogingen om zonder account een lootje te bewaren (= een account aan te maken), per IP per uur. Ruim, want een heel
+// gezin kan achter hetzelfde IP tegelijk hun lootje bewaren. ponytail: in het geheugen, één serverinstantie.
+const claimAttempts = new Map();
+setInterval(() => claimAttempts.clear(), 60 * 60 * 1000).unref();
+function claimAttemptAllowed(ip) {
+    const n = (claimAttempts.get(ip) || 0) + 1;
+    claimAttempts.set(ip, n);
+    return n <= (Number(process.env.ACCOUNT_LIMIT_PER_HOUR) || 30);
+}
 
 const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 const fail = (res, status, message) => res.status(status).json({ success: false, message });
@@ -398,6 +408,7 @@ app.post('/api/me/claim', strict, wrap(async (req, res) => {
     if (!assignment) return fail(res, 404, 'Deze loting bestaat niet meer.');
 
     let user = auth.userFrom(req);
+    if (!user && !claimAttemptAllowed(req.ip)) return fail(res, 429, 'Te veel pogingen vanaf dit netwerk. Probeer het over een uur opnieuw.');
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     const password = typeof req.body.password === 'string' ? req.body.password : '';
 
@@ -427,7 +438,7 @@ app.post('/api/me/claim', strict, wrap(async (req, res) => {
         // Je koos zelf een wachtwoord: meteen ingelogd. Het adres is echter niet bevestigd (iemand kan het adres van een ander
         // intypen), dus deze sessie is kort. Kiest de echte eigenaar later een eigen wachtwoord, dan is de toegang snel weg.
         auth.setSession(res, user, UNVERIFIED_SESSION_SECONDS);
-        sendAccountCreatedEmail(user.email).catch(() => {});
+        sendAccountCreatedEmail(user.email, req.ip).catch(() => {});
     } else if (created) {
         try { await auth.requestPasswordReset(user.email); mailRequested = true; } catch (err) { console.error('Resetmail aanvragen mislukt:', err.message); }
     }

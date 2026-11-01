@@ -63,13 +63,15 @@ const verifyToken = (token, purpose) => {
 // { id, email } of null
 function userFrom(req) {
     const payload = verify(readCookie(req, COOKIE));
-    return payload ? { id: payload.uid, email: payload.email } : null;
+    // Alleen echte sessies: andere getekende tokens (zoals een claim-token) delen de sleutel maar hebben een ander doel.
+    if (!payload || payload.p !== 'session' || typeof payload.uid !== 'string' || typeof payload.email !== 'string' || !payload.uid) return null;
+    return { id: payload.uid, email: payload.email };
 }
 
 const cookieFlags = () => `HttpOnly; SameSite=Lax; Path=/${cfg().base.startsWith('https') ? '; Secure' : ''}`;
 
 function setSession(res, user, seconds = SESSION_SECONDS) {
-    const token = sign({ uid: user.id, email: user.email, exp: Math.floor(Date.now() / 1000) + seconds });
+    const token = sign({ p: 'session', uid: user.id, email: user.email, exp: Math.floor(Date.now() / 1000) + seconds });
     res.setHeader('Set-Cookie', `${COOKIE}=${token}; Max-Age=${seconds}; ${cookieFlags()}`);
 }
 
