@@ -64,6 +64,11 @@
             <p class="lead">Voeg minimaal 3 mensen toe.</p>
 
             <div class="stack">
+                <div id="reuseField" class="field hidden">
+                    <label for="reuseSelect">Begin met de namen van een eerdere loting</label>
+                    <select id="reuseSelect"><option value="">Nee, ik begin leeg</option></select>
+                    <small>Namen en gezinnen worden overgenomen. Je kunt ze daarna nog aanpassen.</small>
+                </div>
                 <button id="familyToggle" class="toggle" type="button" aria-pressed="false">
                     <span class="switch"></span>
                     <span>Gezinsmodus: mensen uit hetzelfde gezin trekken elkaar niet</span>
@@ -209,6 +214,7 @@
         let families = {};     // naam -> gezin
         let familyMode = false;
         let editing = null;
+        let knownLotteries = [];
         let socket = null;
 
         const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -262,6 +268,7 @@
             applyDesign(null);
             const data = await call('/api/admin/lotteries');
             if (!data.success) return;
+            knownLotteries = data.lotteries;
             $('myLotteries').innerHTML = data.lotteries.map(l => `
                 <li><a class="list-link" href="/admin/${esc(l.eventUrl)}"><b>${esc(l.eventName)}</b>
                 <small>${l.created ? new Date(l.created).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</small></a></li>`).join('');
@@ -272,7 +279,7 @@
         $('toListBtn').onclick = showList;
 
         // --- Nieuwe loting: stap 1 ---
-        $('newBtn').onclick = () => { people = []; families = {}; familyMode = false; resetFamilyToggle(); renderPeople(); showScreen('setupScreen'); $('eventName').focus(); };
+        $('newBtn').onclick = () => { people = []; families = {}; familyMode = false; resetFamilyToggle(); renderPeople(); renderReuse(); showScreen('setupScreen'); $('eventName').focus(); };
         $('setupBack').onclick = showList;
         $('setupForm').addEventListener('submit', e => {
             e.preventDefault();
@@ -344,6 +351,31 @@
         $('familyDialog').addEventListener('close', () => {
             const value = $('familyEdit').value.trim();
             if ($('familyDialog').returnValue === 'ok' && value && editing) { families[editing] = value; renderPeople(); }
+        });
+
+        // --- Namen overnemen van een eerdere loting ---
+        function renderReuse() {
+            $('reuseSelect').innerHTML = '<option value="">Nee, ik begin leeg</option>'
+                + knownLotteries.map(l => `<option value="${esc(l.eventUrl)}">${esc(l.eventName)}</option>`).join('');
+            $('reuseField').classList.toggle('hidden', knownLotteries.length === 0);
+        }
+
+        $('reuseSelect').addEventListener('change', async () => {
+            const code = $('reuseSelect').value;
+            if (!code) return;
+            if (people.length && !(await askConfirm('Lijst vervangen?', 'De namen die je al hebt toegevoegd worden vervangen door die van de eerdere loting.', 'Vervang'))) {
+                $('reuseSelect').value = '';
+                return;
+            }
+            const data = await call(`/api/admin/lottery/${code}`);
+            $('reuseSelect').value = '';
+            if (!data.success) return toast('Namen ophalen mislukt', data.message, 'error');
+            people = [...data.participants];
+            families = { ...data.families };
+            familyMode = !!data.familyMode;
+            resetFamilyToggle();
+            renderPeople();
+            toast('Namen overgenomen', `${people.length} deelnemers. Pas ze zo nodig nog aan.`, 'success');
         });
 
         $('createBtn').onclick = async () => {
