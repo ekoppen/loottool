@@ -274,7 +274,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     };
     const reset = {
         event: 'user.password_reset_requested', tenant_id: 't1', timestamp: 'nu',
-        data: { email: 'anna@example.nl', naam: 'Anna <b>', reset_url: `${process.env.APENKAAS_URL}/login/t1/app1/nieuw-wachtwoord?flow=abc` }
+        data: { email: 'anna@example.nl', naam: 'Anna <b>', token: 'goede-token-1234567890', reset_url: null }
     };
     const sentMail = [];
     mail.transporter = { sendMail: async m => { sentMail.push(m); } };
@@ -285,18 +285,15 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     assert.equal((await hook(reset, { signature: '' })).status, 401);               // geen handtekening
     assert.equal((await hook({ ...reset, tenant_id: 'andere' })).status, 400);      // andere tenant
     assert.equal((await hook({ ...reset, event: 'user.register' })).ignored, true); // andere gebeurtenis
-    assert.equal((await hook({ ...reset, data: { ...reset.data, reset_url: 'https://evil.example/nieuw-wachtwoord' } })).status, 400); // link buiten Apenkaas
+    assert.equal((await hook({ ...reset, data: { ...reset.data, reset_url: 'https://apenkaas.nl/login/t/a/nieuw-wachtwoord?token=x' } })).ignored, 'platform-mail'); // loginpagina-resets mailt Apenkaas zelf
     assert.equal(sentMail.length, 0);
     assert.ok((await hook(reset)).success);
     assert.equal(sentMail.length, 1);
     assert.equal(sentMail[0].to, 'anna@example.nl');
-    assert.ok(sentMail[0].html.includes('nieuw-wachtwoord?flow=abc'));
+    assert.ok(sentMail[0].html.includes('http://localhost:3000/nieuw-wachtwoord?token=goede-token-1234567890'));
     assert.ok(!sentMail[0].html.includes('<b>'));                                   // naam is geëscaped
-    const tokenOnly = { ...reset, data: { email: 'oma@example.nl', naam: null, token: 'goede-token-1234567890', reset_url: null } };
-    assert.ok((await hook(tokenOnly)).success);                                     // zonder reset_url: eigen link met token
-    assert.ok(sentMail.at(-1).html.includes('http://localhost:3000/nieuw-wachtwoord?token=goede-token-1234567890'));
-    assert.equal((await hook({ ...tokenOnly, data: { ...tokenOnly.data, token: 'x' } })).status, 400);
-    assert.equal((await hook({ ...tokenOnly, data: { ...tokenOnly.data, token: undefined } })).status, 400);
+    assert.equal((await hook({ ...reset, data: { ...reset.data, token: 'x' } })).status, 400);        // ongeldig token
+    assert.equal((await hook({ ...reset, data: { ...reset.data, token: undefined } })).status, 400); // geen token en geen reset_url
     mail.transporter = { sendMail: async () => { throw new Error('smtp stuk'); } };
     assert.equal((await hook(reset)).status, 503);                                  // mail mislukt: Apenkaas probeert later opnieuw
 

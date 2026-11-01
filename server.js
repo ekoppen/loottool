@@ -442,19 +442,12 @@ app.post('/api/webhooks/apenkaas', wrap(async (req, res) => {
     if (event !== 'user.password_reset_requested') return res.json({ success: true, ignored: true });
 
     if (!data || !isEmail(data.email)) return fail(res, 400, 'Ongeldige melding');
-    // Via de loginpagina komt een resetlink van Apenkaas mee; bij een aanvraag via de API alleen een token,
-    // dan verwijzen we naar onze eigen pagina. Ook een ondertekende resetlink moet naar Apenkaas wijzen.
-    let link;
-    if (data.reset_url) {
-        let url;
-        try { url = new URL(data.reset_url); } catch { return fail(res, 400, 'Ongeldige resetlink'); }
-        if (url.origin !== new URL(process.env.APENKAAS_URL || 'https://apenkaas.nl').origin) return fail(res, 400, 'Ongeldige melding');
-        link = url.href;
-    } else if (typeof data.token === 'string' && TOKEN_RE.test(data.token)) {
-        link = `${baseUrl()}/nieuw-wachtwoord?token=${encodeURIComponent(data.token)}`;
-    } else {
-        return fail(res, 400, 'Ongeldige melding');
-    }
+    // Resets via de loginpagina (met reset_url) mailt Apenkaas zelf, want deze tenant staat in MAIL_TENANTS.
+    // Hier alleen onze eigen aanvragen via de API ("oud account omzetten"): die hebben alleen een token,
+    // dan verwijzen we naar onze eigen pagina.
+    if (data.reset_url) return res.json({ success: true, ignored: 'platform-mail' });
+    if (typeof data.token !== 'string' || !TOKEN_RE.test(data.token)) return fail(res, 400, 'Ongeldige melding');
+    const link = `${baseUrl()}/nieuw-wachtwoord?token=${encodeURIComponent(data.token)}`;
 
     const name = typeof data.naam === 'string' ? data.naam.slice(0, 80) : '';
     if (!(await sendPasswordResetEmail(data.email.trim(), name, link))) return fail(res, 503, 'De e-mail kon niet worden verstuurd');
