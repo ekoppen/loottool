@@ -3,1436 +3,347 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Sinterklaas Lootjes</title>
-    <script src="/socket.io/socket.io.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;900&display=swap');
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
-            min-height: 100vh;
-            height: 100vh;
-            padding: 24px;
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        /* Static background */
-        body::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background:
-                radial-gradient(circle at 20% 50%, rgba(196, 30, 58, 0.4), transparent 50%),
-                radial-gradient(circle at 80% 80%, rgba(218, 165, 32, 0.3), transparent 50%),
-                radial-gradient(circle at 40% 20%, rgba(139, 69, 19, 0.4), transparent 50%);
-            pointer-events: none;
-            opacity: 0.5;
-        }
-
-        .container {
-            max-width: 900px;
-            max-height: calc(100vh - 48px);
-            width: 100%;
-            background: rgba(255, 255, 255, 0.92);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-radius: 24px;
-            padding: 36px 40px;
-            overflow-y: auto;
-            box-shadow:
-                0 20px 60px rgba(0, 0, 0, 0.3),
-                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
-            border: 1px solid rgba(218, 165, 32, 0.3);
-            position: relative;
-            z-index: 1;
-        }
-
-        h1 {
-            font-family: 'Playfair Display', serif;
-            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-align: center;
-            margin-bottom: 8px;
-            font-size: 2.2em;
-            font-weight: 900;
-            letter-spacing: 0.02em;
-            text-shadow: 0 0 30px rgba(218, 165, 32, 0.6), 0 0 60px rgba(218, 165, 32, 0.4);
-            filter: drop-shadow(0 0 20px rgba(218, 165, 32, 0.5));
-        }
-
-        .sint-image {
-            width: 120px;
-            height: auto;
-            display: block;
-            margin: 0 auto 20px auto;
-            filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.2));
-        }
-
-        .subtitle {
-            text-align: center;
-            color: #6b7280;
-            margin-bottom: 40px;
-            font-size: 1em;
-            font-weight: 400;
-        }
-
-        h2 {
-            font-family: 'Playfair Display', serif;
-            text-align: center;
-            color: #374151;
-            font-size: 1.6em;
-            font-weight: 700;
-            margin-bottom: 28px;
-            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .section {
-            display: none;
-        }
-
-        .section.active {
-            display: block;
-        }
-
-        .input-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #374151;
-            font-weight: 500;
-            font-size: 0.9em;
-        }
-
-        input[type="text"],
-        input[type="password"],
-        input[type="email"],
-        select {
-            width: 100%;
-            padding: 14px 16px;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            font-size: 15px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            background: #fff;
-            font-family: inherit;
-        }
-
-        input:focus, select:focus {
-            outline: none;
-            border-color: #c41e3a;
-            box-shadow: 0 0 0 4px rgba(196, 30, 58, 0.1);
-        }
-
-        button {
-            width: 100%;
-            max-width: 350px;
-            margin-left: auto;
-            margin-right: auto;
-            display: block;
-            padding: 14px 24px;
-            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 14px rgba(196, 30, 58, 0.4);
-            position: relative;
-            overflow: hidden;
-            font-family: inherit;
-            margin-top: 8px;
-        }
-
-        button:hover {
-            box-shadow: 0 6px 20px rgba(196, 30, 58, 0.6);
-        }
-
-        button.secondary {
-            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
-            box-shadow: 0 4px 14px rgba(107, 114, 128, 0.4);
-        }
-
-        button.secondary:hover {
-            box-shadow: 0 6px 20px rgba(107, 114, 128, 0.6);
-        }
-
-        button.danger {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
-        }
-
-        button.danger:hover {
-            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
-        }
-
-        button.toggle-families {
-            background: linear-gradient(135deg, #daa520 0%, #b8860b 100%);
-            box-shadow: 0 4px 14px rgba(218, 165, 32, 0.4);
-        }
-
-        button.toggle-families:hover {
-            box-shadow: 0 6px 20px rgba(218, 165, 32, 0.6);
-        }
-
-        .names-list {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 6px;
-            padding: 12px;
-            margin: 20px 0;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .name-item {
-            padding: 10px 12px;
-            background: white;
-            margin-bottom: 8px;
-            border-radius: 4px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border: 1px solid #e9ecef;
-            gap: 12px;
-        }
-
-        .name-item > span {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            font-weight: 500;
-            color: #1f2937;
-        }
-
-        .family-badge {
-            background: linear-gradient(135deg, rgba(218, 165, 32, 0.15) 0%, rgba(184, 134, 11, 0.15) 100%);
-            color: #8b4513;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-            margin-left: 10px;
-            border: 1.5px solid rgba(218, 165, 32, 0.4);
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .family-badge:hover {
-            background: linear-gradient(135deg, rgba(218, 165, 32, 0.25) 0%, rgba(184, 134, 11, 0.25) 100%);
-            border-color: rgba(218, 165, 32, 0.6);
-        }
-
-        .name-item-actions {
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
-
-        .edit-btn {
-            background: linear-gradient(135deg, #daa520 0%, #b8860b 100%);
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 600;
-            transition: all 0.2s;
-            width: auto;
-            margin: 0;
-            flex-shrink: 0;
-        }
-
-        .edit-btn:hover {
-            box-shadow: 0 2px 8px rgba(218, 165, 32, 0.4);
-        }
-
-        .remove-btn {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 600;
-            transition: all 0.2s;
-            width: auto;
-            margin: 0;
-            flex-shrink: 0;
-        }
-
-        .remove-btn:hover {
-            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
-        }
-
-        .info, .warning, .success, .error {
-            padding: 16px 20px;
-            margin: 20px 0;
-            border-radius: 12px;
-            border: 2px solid;
-            font-size: 0.9em;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        }
-
-        .info {
-            background: rgba(255, 255, 255, 0.8);
-            border-color: #e5e7eb;
-            color: #374151;
-        }
-
-        .warning {
-            background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(245, 158, 11, 0.1) 100%);
-            border-color: #f59e0b;
-            color: #92400e;
-        }
-
-        .success {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
-            border-color: #10b981;
-            color: #065f46;
-        }
-
-        .error {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
-            border-color: #ef4444;
-            color: #991b1b;
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 24px 0;
-        }
-
-        .stat-box {
-            background: linear-gradient(135deg, rgba(196, 30, 58, 0.08) 0%, rgba(139, 69, 19, 0.08) 100%);
-            border: 2px solid rgba(196, 30, 58, 0.2);
-            padding: 28px 24px;
-            border-radius: 16px;
-            text-align: center;
-            backdrop-filter: blur(10px);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .stat-box:hover {
-            box-shadow: 0 8px 20px rgba(196, 30, 58, 0.15);
-        }
-
-        .stat-number {
-            font-size: 2.5em;
-            font-weight: 700;
-            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .stat-label {
-            color: #6b7280;
-            margin-top: 8px;
-            font-size: 0.9em;
-            font-weight: 500;
-        }
-
-        /* Toast Notifications */
-        .toast-container {
-            position: fixed;
-            top: 24px;
-            right: 24px;
-            z-index: 10000;
-        }
-
-        .toast {
-            background: rgba(255, 255, 255, 0.98);
-            border-radius: 16px;
-            padding: 18px 22px;
-            margin-bottom: 16px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-            min-width: 320px;
-            max-width: 400px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            border: 2px solid rgba(196, 30, 58, 0.3);
-        }
-
-        .toast.success {
-            border-color: rgba(16, 185, 129, 0.5);
-            background: rgba(240, 253, 244, 0.98);
-        }
-
-        .toast.error {
-            border-color: rgba(239, 68, 68, 0.5);
-            background: rgba(254, 242, 242, 0.98);
-        }
-
-        .toast.info {
-            border-color: rgba(59, 130, 246, 0.5);
-            background: rgba(239, 246, 255, 0.98);
-        }
-
-        .toast.warning {
-            border-color: rgba(251, 191, 36, 0.5);
-            background: rgba(254, 252, 232, 0.98);
-        }
-
-        .toast-icon {
-            font-size: 1.6em;
-            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-        }
-
-        .toast-content {
-            flex: 1;
-        }
-
-        .toast-title {
-            font-weight: 600;
-            color: #1f2937;
-            margin-bottom: 4px;
-            font-size: 0.95em;
-        }
-
-        .toast-message {
-            font-size: 0.85em;
-            color: #6b7280;
-            line-height: 1.4;
-        }
-
-        /* Modal */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.6);
-            z-index: 9999;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .modal {
-            background: rgba(255, 255, 255, 0.98);
-            border-radius: 24px;
-            padding: 40px 36px;
-            max-width: 500px;
-            width: 100%;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .modal-header {
-            text-align: center;
-            margin-bottom: 28px;
-        }
-
-        .modal-icon {
-            font-size: 3.5em;
-            margin-bottom: 16px;
-            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1));
-        }
-
-        .modal-title {
-            font-size: 1.5em;
-            font-weight: 700;
-            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 8px;
-        }
-
-        .modal-text {
-            color: #6b7280;
-            text-align: center;
-            margin-bottom: 28px;
-            line-height: 1.6;
-            font-size: 1em;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: 12px;
-        }
-
-        .modal-buttons button {
-            flex: 1;
-        }
-
-        /* Event URL Display */
-        .event-url-box {
-            display: flex;
-            gap: 12px;
-            margin: 24px 0;
-        }
-
-        .url-card {
-            flex: 1;
-            background: white;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            transition: all 0.3s;
-        }
-
-        .url-card:hover {
-            border-color: #c41e3a;
-            box-shadow: 0 4px 12px rgba(196, 30, 58, 0.15);
-        }
-
-        .url-card-label {
-            font-size: 0.75em;
-            font-weight: 600;
-            color: #9ca3af;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .url-card-type {
-            font-size: 1.1em;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 4px;
-        }
-
-        .copy-btn {
-            background: linear-gradient(135deg, #c41e3a 0%, #8b4513 100%);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 0.9em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 2px 8px rgba(196, 30, 58, 0.3);
-            width: 100%;
-        }
-
-        .copy-btn:hover {
-            box-shadow: 0 4px 14px rgba(196, 30, 58, 0.5);
-            transform: translateY(-1px);
-        }
-
-        @media (max-width: 640px) {
-            .event-url-box {
-                flex-direction: column;
-            }
-        }
-    </style>
+    <meta name="robots" content="noindex">
+    <title>Beheer - Sinterklaas Lootjes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Fraunces:ital,wght@0,700;0,800;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <!-- Toast Container -->
-    <div class="toast-container" id="toastContainer"></div>
+    <main class="sheet">
+        <header class="brand">
+            <img src="/sint.png" alt="">
+            <div>
+                <h1><a href="/">Sinterklaas Lootjes</a></h1>
+                <p>Beheer</p>
+            </div>
+        </header>
 
-    <!-- Confirmation Modal -->
-    <div class="modal-overlay" id="confirmModal">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-icon" id="modalIcon">⚠️</div>
-                <div class="modal-title" id="modalTitle">Bevestig actie</div>
-            </div>
-            <div class="modal-text" id="modalText"></div>
-            <div class="modal-buttons">
-                <button class="secondary" onclick="closeModal()">Annuleren</button>
-                <button id="modalConfirmBtn" onclick="modalConfirm()">Bevestigen</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Family Modal -->
-    <div class="modal-overlay" id="editFamilyModal">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-icon">👨‍👩‍👧‍👦</div>
-                <div class="modal-title">Wijzig gezinsnaam</div>
-            </div>
-            <div class="modal-text">
-                <span id="editFamilyPersonName" style="font-weight: 600; color: #1f2937;"></span>
-            </div>
-            <div class="input-group">
-                <label for="editFamilyInput">Gezinsnaam:</label>
-                <input type="text" id="editFamilyInput" list="editFamilyList" placeholder="bijv. Familie Jansen" autocomplete="off">
-                <datalist id="editFamilyList"></datalist>
-                <small id="existingFamiliesHint" style="color: #6b7280; font-size: 0.85em; margin-top: 4px; display: block;"></small>
-            </div>
-            <div class="modal-buttons">
-                <button class="secondary" onclick="closeEditFamilyModal()">Annuleren</button>
-                <button onclick="confirmEditFamily()">Opslaan</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="container">
-        <img src="/sint.png" alt="Sinterklaas" class="sint-image">
-        <h1>Sinterklaas Lootjes</h1>
-        <p class="subtitle">Maak je eigen loting</p>
-
-        <!-- Welcome / Create New Event Section -->
-        <div id="welcomeSection" class="section active">
+        <!-- Stap 1: gegevens -->
+        <section id="setupScreen" class="screen">
+            <ol class="steps"><li class="on"><span>1</span>Gegevens</li><li><span>2</span>Deelnemers</li></ol>
             <h2>Start een nieuwe loting</h2>
+            <p class="lead">Je kiest zelf een gebruikersnaam en wachtwoord om de loting later te beheren.</p>
+            <form id="setupForm" class="stack">
+                <div class="field"><label for="eventName">Naam van de loting</label>
+                    <input id="eventName" maxlength="80" placeholder="Familie Jansen 2026" required></div>
+                <div class="field"><label for="adminUsername">Gebruikersnaam</label>
+                    <input id="adminUsername" maxlength="40" autocomplete="username" required></div>
+                <div class="field"><label for="adminPassword">Wachtwoord</label>
+                    <input id="adminPassword" type="password" minlength="4" autocomplete="new-password" required>
+                    <small>Minimaal 4 tekens. Bewaar het goed, we kunnen het niet terugzoeken.</small></div>
+                <div class="field"><label for="adminEmail">E-mailadres (niet verplicht)</label>
+                    <input id="adminEmail" type="email" autocomplete="email" placeholder="je@email.nl">
+                    <small>Dan mailen we je de links en je inloggegevens.</small></div>
+                <button class="btn btn-block" type="submit">Verder naar deelnemers</button>
+            </form>
+            <p class="footer">Heb je al een loting? <button class="link" type="button" id="toLogin">Log in</button></p>
+        </section>
 
-            <div class="input-group">
-                <label for="eventName">Naam van je loting:</label>
-                <input type="text" id="eventName" placeholder="bijv. Familie Jansen 2024">
+        <!-- Inloggen -->
+        <section id="loginScreen" class="screen hidden">
+            <h2>Log in bij je loting</h2>
+            <form id="loginForm" class="stack">
+                <div class="field"><label for="loginCode">Code van je loting</label>
+                    <input id="loginCode" maxlength="16" placeholder="a1b2c3d4e5f6a7b8" autocomplete="off" spellcheck="false" required>
+                    <small>De 16 tekens uit je beheerlink: /admin/<b>a1b2c3d4e5f6a7b8</b></small></div>
+                <div class="field"><label for="loginUsername">Gebruikersnaam</label>
+                    <input id="loginUsername" autocomplete="username" required></div>
+                <div class="field"><label for="loginPassword">Wachtwoord</label>
+                    <input id="loginPassword" type="password" autocomplete="current-password" required></div>
+                <button class="btn btn-block" type="submit">Inloggen</button>
+            </form>
+            <p class="footer"><button class="link" type="button" id="toSetup">Nieuwe loting starten</button></p>
+        </section>
+
+        <!-- Stap 2: deelnemers -->
+        <section id="peopleScreen" class="screen hidden">
+            <ol class="steps"><li><span>1</span>Gegevens</li><li class="on"><span>2</span>Deelnemers</li></ol>
+            <h2>Wie doen er mee?</h2>
+            <p class="lead">Voeg minimaal 3 mensen toe.</p>
+
+            <div class="stack">
+                <button id="familyToggle" class="toggle" type="button" aria-pressed="false">
+                    <span class="switch"></span>
+                    <span>Gezinsmodus: mensen uit hetzelfde gezin trekken elkaar niet</span>
+                </button>
+
+                <form id="addForm" class="stack">
+                    <div class="field"><label for="nameInput">Naam</label>
+                        <input id="nameInput" maxlength="40" autocomplete="off" required></div>
+                    <div id="familyField" class="field hidden"><label for="familyInput">Gezin</label>
+                        <input id="familyInput" maxlength="40" list="familyList" autocomplete="off" placeholder="Familie Jansen">
+                        <datalist id="familyList"></datalist></div>
+                    <button class="btn btn-ghost btn-block" type="submit">Toevoegen</button>
+                </form>
+
+                <ul id="peopleList" class="people"></ul>
+                <p id="peopleHint" class="note hidden"></p>
             </div>
 
-            <div class="input-group">
-                <label for="adminUsername">Kies een gebruikersnaam:</label>
-                <input type="text" id="adminUsername" placeholder="bijv. admin of je eigen naam">
+            <div class="actions">
+                <button id="createBtn" class="btn btn-block" type="button" disabled>Loting aanmaken</button>
+                <button id="backBtn" class="btn btn-ghost btn-block" type="button">Terug</button>
             </div>
+        </section>
 
-            <div class="input-group">
-                <label for="adminPasswordSetup">Kies een wachtwoord:</label>
-                <input type="password" id="adminPasswordSetup" placeholder="Minimaal 4 tekens">
-            </div>
+        <!-- Dashboard -->
+        <section id="dashScreen" class="screen hidden">
+            <h2 id="dashTitle"></h2>
+            <p id="dashDate" class="lead"></p>
 
-            <div class="input-group">
-                <label for="adminEmail">Emailadres (optioneel):</label>
-                <input type="email" id="adminEmail" placeholder="je@email.nl">
-                <small style="color: #6b7280; font-size: 0.85em; margin-top: 4px; display: block;">
-                    We sturen je de inloggegevens toe
-                </small>
-            </div>
-
-            <div class="info">
-                <strong>Tip:</strong> Bewaar je gebruikersnaam en wachtwoord goed! Je hebt deze nodig om je loting later te kunnen beheren.
-            </div>
-
-            <button onclick="showParticipantEntry()">Verder naar deelnemers</button>
-
-            <div style="text-align: center; margin-top: 20px;">
-                <p style="color: #6b7280; font-size: 0.9em;">
-                    Heb je al een loting? <a href="#" onclick="showLoginSection(); return false;" style="color: #c41e3a; text-decoration: none; font-weight: 600;">Login hier</a>
-                </p>
-            </div>
-        </div>
-
-        <!-- Login to Existing Event Section -->
-        <div id="loginSection" class="section">
-            <h2>Login bij je loting</h2>
-
-            <div class="input-group">
-                <label for="loginEventUrl">Event URL Code:</label>
-                <input type="text" id="loginEventUrl" placeholder="bijv. abc123def456">
-                <small style="color: #6b7280; font-size: 0.85em; margin-top: 4px; display: block;">
-                    De code uit je admin URL: /admin/<strong>abc123def456</strong>
-                </small>
-            </div>
-
-            <div class="input-group">
-                <label for="loginUsername">Gebruikersnaam:</label>
-                <input type="text" id="loginUsername" placeholder="Je gebruikersnaam">
-            </div>
-
-            <div class="input-group">
-                <label for="loginPassword">Wachtwoord:</label>
-                <input type="password" id="loginPassword" placeholder="Je wachtwoord">
-            </div>
-
-            <button onclick="login()">Inloggen</button>
-            <button class="secondary" onclick="showWelcomeSection()">← Terug</button>
-        </div>
-
-        <!-- Participant Entry Section -->
-        <div id="participantSection" class="section">
-            <h2>Voeg deelnemers toe</h2>
-
-            <button class="toggle-families" onclick="toggleFamilyMode()" id="familyToggle">
-                Gezinsmodus Inschakelen
-            </button>
-
-            <div id="simpleModeInputs">
-                <div class="input-group">
-                    <label for="nameInput">Voer namen in:</label>
-                    <input type="text" id="nameInput" placeholder="Naam..." autocomplete="off">
+            <div class="stack">
+                <div>
+                    <b id="progressText"></b>
+                    <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="meter"><i></i></div>
                 </div>
-                <button onclick="addName()">Naam Toevoegen</button>
+
+                <div class="field"><label for="shareUrl">Stuur deze link naar de deelnemers</label>
+                    <div class="copyrow"><input id="shareUrl" readonly>
+                        <button class="btn btn-small" type="button" data-copy="shareUrl">Kopieer</button></div></div>
+                <div class="field"><label for="adminUrl">Jouw beheerlink (niet delen)</label>
+                    <div class="copyrow"><input id="adminUrl" readonly>
+                        <button class="btn btn-small btn-ghost" type="button" data-copy="adminUrl">Kopieer</button></div></div>
+
+                <div><h3>Deelnemers</h3><ul id="dashPeople" class="people"></ul></div>
             </div>
 
-            <div id="familyModeInputs" style="display: none;">
-                <div class="input-group">
-                    <label for="familyNameInput">Naam persoon:</label>
-                    <input type="text" id="familyNameInput" placeholder="bijv. Jan" autocomplete="off">
-                </div>
-                <div class="input-group">
-                    <label for="familyGroupInput">Gezinsnaam:</label>
-                    <input type="text" id="familyGroupInput" list="familyList" placeholder="bijv. Familie Jansen" autocomplete="off">
-                    <datalist id="familyList"></datalist>
-                    <small style="color: #6b7280; font-size: 0.85em; margin-top: 4px; display: block;">
-                        Type een nieuwe naam of kies een bestaande
-                    </small>
-                </div>
-                <button onclick="addNameWithFamily()">Persoon Toevoegen</button>
-                <div class="info" style="margin-top: 15px;">
-                    <strong>Let op:</strong> Personen uit hetzelfde gezin kunnen elkaar niet trekken
-                </div>
+            <div class="actions">
+                <button id="recoveryBtn" class="btn btn-ghost btn-block" type="button">Iemand is zijn lootje vergeten</button>
+                <button id="deleteBtn" class="btn btn-danger btn-block" type="button">Loting verwijderen</button>
+                <button id="logoutBtn" class="btn btn-ghost btn-block" type="button">Uitloggen</button>
             </div>
+        </section>
+    </main>
 
-            <div id="namesList" class="names-list" style="display: none;"></div>
-
-            <button id="createButton" onclick="createLottery()" style="display: none;">
-                Loting Aanmaken
-            </button>
-            <button class="secondary" onclick="backToSetup()">Terug</button>
-        </div>
-
-        <!-- Admin Dashboard Section -->
-        <div id="adminSection" class="section">
-            <div id="currentConfig"></div>
-
-            <button onclick="showRecoveryModal()" style="margin-bottom: 12px;">🔄 Recovery Link Maken</button>
-            <button class="danger" onclick="deleteLottery()">Loting Verwijderen</button>
-            <button class="secondary" onclick="logout()">Uitloggen</button>
-        </div>
-
-        <!-- Recovery Modal -->
-        <div class="modal-overlay" id="recoveryModal">
-            <div class="modal">
-                <div class="modal-header">
-                    <div class="modal-icon">🔄</div>
-                    <div class="modal-title">Recovery Link Maken</div>
-                </div>
-                <div class="modal-text">
-                    Iemand vergeten wie ze getrokken heeft? Maak een recovery link aan!
-                </div>
-                <div class="info" style="margin-bottom: 20px; text-align: left;">
-                    <strong>Hoe werkt het?</strong><br>
-                    1. Vul het emailadres in van de persoon die het vergeten is<br>
-                    2. Deel de recovery link met IEDEREEN<br>
-                    3. Iedereen (behalve degene die het vergat) klikt op de naam die ze trokken<br>
-                    4. Bij de laatste klik wordt automatisch een email verstuurd met het juiste antwoord
-                </div>
-                <div class="input-group">
-                    <label for="recoveryEmail">Email van persoon die het vergeten is</label>
-                    <input type="email" id="recoveryEmail" placeholder="naam@example.com">
-                </div>
-                <div class="modal-buttons">
-                    <button class="secondary" onclick="closeRecoveryModal()">Annuleren</button>
-                    <button class="primary" onclick="createRecoverySession()">Aanmaken</button>
-                </div>
-                <div id="recoveryLinkBox" style="display: none; margin-top: 20px;">
-                    <div class="success" style="margin-bottom: 12px;">
-                        ✅ Recovery link aangemaakt!
-                    </div>
-                    <div class="url-card">
-                        <div class="url-card-label">Recovery Link</div>
-                        <div class="url-card-url" id="recoveryUrl"></div>
-                        <button class="copy-btn" onclick="copyRecoveryUrl()">Kopieer Link</button>
-                    </div>
-                </div>
+    <!-- Wijzig gezin -->
+    <dialog id="familyDialog">
+        <form method="dialog" id="familyForm">
+            <h2 id="familyDialogTitle">Gezin wijzigen</h2>
+            <div class="field"><label for="familyEdit">Gezin</label>
+                <input id="familyEdit" maxlength="40" list="familyList" autocomplete="off" required></div>
+            <div class="dialog-actions">
+                <button class="btn btn-ghost" value="cancel" formnovalidate>Annuleren</button>
+                <button class="btn" value="ok">Opslaan</button>
             </div>
-        </div>
-    </div>
+        </form>
+    </dialog>
 
+    <!-- Herstel -->
+    <dialog id="recoveryDialog">
+        <form method="dialog" id="recoveryForm">
+            <h2>Lootje kwijt?</h2>
+            <p>Iedereen behalve degene die het vergat klikt op de naam die hij of zij trok. Als het bijna rond is, mailen we de ontbrekende naam naar de vergeetachtige, en alleen naar die persoon.</p>
+            <div class="field"><label for="recoveryEmail">E-mailadres van degene die het vergat</label>
+                <input id="recoveryEmail" type="email" placeholder="naam@email.nl"></div>
+            <div id="recoveryResult" class="field hidden"><label for="recoveryUrl">Deel deze link met iedereen</label>
+                <div class="copyrow"><input id="recoveryUrl" readonly>
+                    <button class="btn btn-small" type="button" data-copy="recoveryUrl">Kopieer</button></div></div>
+            <div class="dialog-actions">
+                <button class="btn btn-ghost" value="cancel" formnovalidate>Sluiten</button>
+                <button class="btn" id="recoveryCreate" type="button">Link maken</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/common.js"></script>
     <script>
-        let eventUrl = null;
-        let adminUsername = '';
-        let adminPassword = '';
-        let adminEmail = '';
-        let eventName = '';
-        let participants = [];
-        let families = {};
+        const MIN_PEOPLE = 3;
+        const pathCode = (location.pathname.match(/^\/admin\/([a-f0-9]{16})$/) || [])[1] || null;
+
+        let eventUrl = pathCode;
+        let creds = { username: '', password: '' };
+        let setup = {};
+        let people = [];       // namen in volgorde van toevoegen
+        let families = {};     // naam -> gezin
         let familyMode = false;
-        let socket = null;
-
-        window.addEventListener('load', init);
-
-        function init() {
-            // Check if we have an event URL in the path (e.g., /admin/abc123)
-            const pathParts = window.location.pathname.split('/');
-            if (pathParts[1] === 'admin' && pathParts[2]) {
-                eventUrl = pathParts[2];
-                showLoginSection();
-            }
-
-            initializeSocket();
-        }
-
-        function initializeSocket() {
-            socket = io();
-
-            socket.on('connect', () => {
-                console.log('Admin connected to server');
-                if (eventUrl) {
-                    socket.emit('join-event', eventUrl);
-                }
-            });
-
-            socket.on('participant-viewed', (data) => {
-                console.log('Admin: Participant viewed:', data);
-                loadConfig();
-            });
-
-            socket.on('lottery-reset', () => {
-                console.log('Admin: Lottery reset');
-                showToast('Loting verwijderd', 'Deze loting is verwijderd', 'warning');
-                logout();
-            });
-        }
-
-        function showWelcomeSection() {
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.getElementById('welcomeSection').classList.add('active');
-        }
-
-        function showLoginSection() {
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.getElementById('loginSection').classList.add('active');
-            if (eventUrl) {
-                document.getElementById('loginEventUrl').value = eventUrl;
-            }
-        }
-
-        function showParticipantEntry() {
-            const name = document.getElementById('eventName').value.trim();
-            const username = document.getElementById('adminUsername').value.trim();
-            const password = document.getElementById('adminPasswordSetup').value.trim();
-            const email = document.getElementById('adminEmail').value.trim();
-
-            if (!name) {
-                showToast('Validatie', 'Voer een naam in voor je loting', 'error');
-                return;
-            }
-
-            if (!username) {
-                showToast('Validatie', 'Kies een gebruikersnaam', 'error');
-                return;
-            }
-
-            if (!password || password.length < 4) {
-                showToast('Validatie', 'Wachtwoord moet minimaal 4 tekens zijn', 'error');
-                return;
-            }
-
-            // Optional email validation
-            if (email && !email.includes('@')) {
-                showToast('Validatie', 'Voer een geldig emailadres in', 'error');
-                return;
-            }
-
-            eventName = name;
-            adminUsername = username;
-            adminPassword = password;
-            adminEmail = email;
-
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.getElementById('participantSection').classList.add('active');
-        }
-
-        function backToSetup() {
-            participants = [];
-            families = {};
-            familyMode = false;
-            updateNamesList();
-
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.getElementById('welcomeSection').classList.add('active');
-        }
-
-        async function login() {
-            const url = document.getElementById('loginEventUrl').value.trim();
-            const username = document.getElementById('loginUsername').value.trim();
-            const password = document.getElementById('loginPassword').value.trim();
-
-            if (!url || !username || !password) {
-                showToast('Validatie', 'Vul alle velden in', 'error');
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/admin/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ eventUrl: url, username, password })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    eventUrl = url;
-                    adminUsername = username;
-                    adminPassword = password;
-
-                    // Join socket room
-                    socket.emit('join-event', eventUrl);
-
-                    // Load config and show admin section
-                    await loadConfig();
-                    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-                    document.getElementById('adminSection').classList.add('active');
-                    showToast('Welkom!', 'Je bent ingelogd', 'success');
-                } else {
-                    showToast('Fout', data.message, 'error');
-                }
-            } catch (err) {
-                showToast('Fout', 'Fout bij inloggen: ' + err.message, 'error');
-            }
-        }
-
-        function logout() {
-            eventUrl = null;
-            adminUsername = '';
-            adminPassword = '';
-            eventName = '';
-            participants = [];
-            families = {};
-
-            document.getElementById('eventName').value = '';
-            document.getElementById('adminUsername').value = '';
-            document.getElementById('adminPasswordSetup').value = '';
-            document.getElementById('loginEventUrl').value = '';
-            document.getElementById('loginUsername').value = '';
-            document.getElementById('loginPassword').value = '';
-
-            showWelcomeSection();
-            showToast('Uitgelogd', 'Je bent uitgelogd', 'info');
-        }
-
-        async function loadConfig() {
-            if (!eventUrl) return;
-
-            try {
-                const response = await fetch(`/api/admin/config?eventUrl=${eventUrl}`);
-                const data = await response.json();
-
-                const configDiv = document.getElementById('currentConfig');
-
-                if (data.participants.length > 0) {
-                    const viewedCount = data.viewedBy ? data.viewedBy.length : 0;
-                    const viewedPercentage = Math.round((viewedCount / data.participants.length) * 100);
-                    const participantUrl = `${window.location.origin}/event/${data.eventUrl}`;
-                    const adminUrl = `${window.location.origin}/admin/${data.eventUrl}`;
-
-                    configDiv.innerHTML = `
-                        <h2>${escapeHtml(data.eventName)}</h2>
-                        <div class="success">
-                            ✅ Je loting is actief!
-                        </div>
-                        <div class="event-url-box">
-                            <div class="url-card">
-                                <div class="url-card-label">Deelnemers Link</div>
-                                <div class="url-card-type">🎁 Lootjes Trekken</div>
-                                <button class="copy-btn" onclick="copyUrl('${participantUrl}')">Kopieer Link</button>
-                            </div>
-                            <div class="url-card">
-                                <div class="url-card-label">Admin Link (Privé)</div>
-                                <div class="url-card-type">⚙️ Beheren</div>
-                                <button class="copy-btn" onclick="copyUrl('${adminUrl}')">Kopieer Link</button>
-                            </div>
-                        </div>
-                        <div class="stats">
-                            <div class="stat-box">
-                                <div class="stat-number">${data.participants.length}</div>
-                                <div class="stat-label">Deelnemers</div>
-                            </div>
-                            <div class="stat-box">
-                                <div class="stat-number">${viewedCount}</div>
-                                <div class="stat-label">Hebben Getrokken</div>
-                            </div>
-                            <div class="stat-box">
-                                <div class="stat-number">${viewedPercentage}%</div>
-                                <div class="stat-label">Voltooid</div>
-                            </div>
-                        </div>
-                        <div class="info">
-                            <strong>Deelnemers:</strong><br>
-                            ${data.participants.map(p => {
-                                const familyBadge = data.familyMode && data.families[p] ? `<span class="family-badge">${escapeHtml(data.families[p])}</span>` : '';
-                                const viewed = data.viewedBy && data.viewedBy.includes(p) ? ' ✅' : '';
-                                return `${escapeHtml(p)}${familyBadge}${viewed}`;
-                            }).join(', ')}
-                        </div>
-                        ${data.created ? `<div class="info"><strong>Aangemaakt:</strong> ${new Date(data.created).toLocaleString('nl-NL')}</div>` : ''}
-                    `;
-                }
-            } catch (err) {
-                showToast('Fout', 'Kon configuratie niet laden', 'error');
-            }
-        }
-
-        function toggleFamilyMode() {
-            familyMode = !familyMode;
-            const toggle = document.getElementById('familyToggle');
-            const simpleInputs = document.getElementById('simpleModeInputs');
-            const familyInputs = document.getElementById('familyModeInputs');
-
-            if (familyMode) {
-                toggle.textContent = 'Gewone Modus';
-                simpleInputs.style.display = 'none';
-                familyInputs.style.display = 'block';
-                document.getElementById('familyNameInput').focus();
-            } else {
-                toggle.textContent = 'Gezinsmodus Inschakelen';
-                simpleInputs.style.display = 'block';
-                familyInputs.style.display = 'none';
-                document.getElementById('nameInput').focus();
-            }
-
-            if (participants.length > 0) {
-                if (confirm('Wil je de huidige lijst wissen?')) {
-                    participants = [];
-                    families = {};
-                    updateNamesList();
-                }
-            }
-        }
-
-        document.getElementById('nameInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') addName();
-        });
-
-        document.getElementById('familyNameInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                document.getElementById('familyGroupInput').focus();
-            }
-        });
-
-        document.getElementById('familyGroupInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                addNameWithFamily();
-            }
-        });
-
-        function addName() {
-            const input = document.getElementById('nameInput');
-            const name = input.value.trim();
-
-            if (name === '') {
-                showToast('Validatie', 'Voer een naam in', 'error');
-                return;
-            }
-
-            if (participants.includes(name)) {
-                showToast('Duplicaat', 'Deze naam is al toegevoegd', 'error');
-                return;
-            }
-
-            participants.push(name);
-            input.value = '';
-            updateNamesList();
-            input.focus();
-            showToast('Toegevoegd', `${name} is toegevoegd`, 'success');
-        }
-
-        function addNameWithFamily() {
-            const nameInput = document.getElementById('familyNameInput');
-            const familyInput = document.getElementById('familyGroupInput');
-            const name = nameInput.value.trim();
-            const family = familyInput.value.trim();
-
-            if (name === '') {
-                showToast('Validatie', 'Voer een naam in', 'error');
-                return;
-            }
-
-            if (family === '') {
-                showToast('Validatie', 'Voer een gezinsnaam in', 'error');
-                return;
-            }
-
-            if (participants.includes(name)) {
-                showToast('Duplicaat', 'Deze naam is al toegevoegd', 'error');
-                return;
-            }
-
-            participants.push(name);
-            families[name] = family;
-
-            // Update datalist with unique family names
-            updateFamilyDatalist();
-
-            nameInput.value = '';
-            updateNamesList();
-            nameInput.focus();
-            showToast('Toegevoegd', `${name} is toegevoegd aan ${family}`, 'success');
-        }
-
-        function updateFamilyDatalist() {
-            const datalist = document.getElementById('familyList');
-            const uniqueFamilies = [...new Set(Object.values(families))];
-            datalist.innerHTML = uniqueFamilies.map(f => `<option value="${escapeHtml(f)}">`).join('');
-        }
-
-        function updateNamesList() {
-            const list = document.getElementById('namesList');
-            const createButton = document.getElementById('createButton');
-
-            if (participants.length === 0) {
-                list.style.display = 'none';
-                createButton.style.display = 'none';
-                return;
-            }
-
-            list.style.display = 'block';
-            list.innerHTML = participants.map((name, index) => {
-                const familyBadge = familyMode ? `<span class="family-badge" onclick="editFamily(${index})" title="Klik om gezin te wijzigen">${escapeHtml(families[name])}</span>` : '';
-                const editBtn = familyMode ? `<button class="edit-btn" onclick="editFamily(${index})" title="Wijzig gezin">Wijzig</button>` : '';
-                return `
-                    <div class="name-item">
-                        <span>${escapeHtml(name)}${familyBadge}</span>
-                        <div class="name-item-actions">
-                            ${editBtn}
-                            <button class="remove-btn" onclick="removeName(${index})" title="Verwijder persoon">Verwijder</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            if (participants.length >= 3) {
-                if (familyMode) {
-                    const uniqueFamilies = new Set(Object.values(families)).size;
-                    if (uniqueFamilies < 2) {
-                        createButton.style.display = 'none';
-                        return;
-                    }
-                }
-                createButton.style.display = 'block';
-            } else {
-                createButton.style.display = 'none';
-            }
-        }
-
-        let editingFamilyIndex = null;
-
-        function editFamily(index) {
-            editingFamilyIndex = index;
-            const name = participants[index];
-            const currentFamily = families[name] || '';
-
-            // Update modal content
-            document.getElementById('editFamilyPersonName').textContent = name;
-            document.getElementById('editFamilyInput').value = currentFamily;
-
-            // Update datalist with existing families
-            const uniqueFamilies = [...new Set(Object.values(families))];
-            const datalist = document.getElementById('editFamilyList');
-            datalist.innerHTML = uniqueFamilies.map(f => `<option value="${escapeHtml(f)}">`).join('');
-
-            // Update hint text
-            const hint = document.getElementById('existingFamiliesHint');
-            if (uniqueFamilies.length > 0) {
-                hint.textContent = `Bestaande gezinnen: ${uniqueFamilies.join(', ')}`;
-            } else {
-                hint.textContent = '';
-            }
-
-            // Show modal
-            document.getElementById('editFamilyModal').classList.add('active');
-            // Focus input after animation
-            setTimeout(() => {
-                document.getElementById('editFamilyInput').focus();
-                document.getElementById('editFamilyInput').select();
-            }, 100);
-        }
-
-        function closeEditFamilyModal() {
-            document.getElementById('editFamilyModal').classList.remove('active');
-            editingFamilyIndex = null;
-        }
-
-        function confirmEditFamily() {
-            if (editingFamilyIndex === null) return;
-
-            const name = participants[editingFamilyIndex];
-            const newFamily = document.getElementById('editFamilyInput').value.trim();
-
-            if (newFamily === '') {
-                showToast('Fout', 'Gezinsnaam mag niet leeg zijn', 'error');
-                return;
-            }
-
-            families[name] = newFamily;
-            updateFamilyDatalist();
-            updateNamesList();
-            showToast('Gewijzigd', `${name} verplaatst naar ${newFamily}`, 'success');
-            closeEditFamilyModal();
-        }
-
-        // Add enter key support for edit family modal
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('editFamilyInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    confirmEditFamily();
-                }
-            });
-        });
-
-        function removeName(index) {
-            const name = participants[index];
-            participants.splice(index, 1);
-            if (familyMode && families[name]) {
-                delete families[name];
-            }
-            updateNamesList();
-        }
-
-        let modalCallback = null;
-
-        function showModal(title, text, icon, confirmText, callback, buttonClass = '') {
-            document.getElementById('modalTitle').textContent = title;
-            document.getElementById('modalText').textContent = text;
-            document.getElementById('modalIcon').textContent = icon;
-            const confirmBtn = document.getElementById('modalConfirmBtn');
-            confirmBtn.textContent = confirmText;
-            confirmBtn.className = buttonClass || '';
-            modalCallback = callback;
-            document.getElementById('confirmModal').classList.add('active');
-        }
-
-        function closeModal() {
-            document.getElementById('confirmModal').classList.remove('active');
-            modalCallback = null;
-        }
-
-        function modalConfirm() {
-            if (modalCallback) {
-                modalCallback();
-            }
-            closeModal();
-        }
-
-        async function createLottery() {
-            if (participants.length < 3) {
-                showToast('Validatie', 'Je hebt minimaal 3 personen nodig', 'error');
-                return;
-            }
-
-            if (familyMode) {
-                const uniqueFamilies = new Set(Object.values(families)).size;
-                if (uniqueFamilies < 2) {
-                    showToast('Validatie', 'Je hebt minimaal 2 verschillende gezinnen nodig', 'error');
-                    return;
-                }
-            }
-
-            showModal(
-                'Loting aanmaken',
-                `Weet je zeker dat je een loting wilt aanmaken met ${participants.length} deelnemers?`,
-                '🎁',
-                'Ja, maak aan',
-                async () => {
-                    try {
-                        const response = await fetch('/api/admin/create', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                eventName,
-                                adminUsername,
-                                adminPassword,
-                                adminEmail,
-                                participants,
-                                families,
-                                familyMode
-                            })
-                        });
-
-                        const data = await response.json();
-
-                        if (data.success) {
-                            eventUrl = data.eventUrl;
-
-                            // Update URL without reload
-                            window.history.pushState({}, '', `/admin/${eventUrl}`);
-
-                            // Join socket room
-                            socket.emit('join-event', eventUrl);
-
-                            // Load and show admin section
-                            await loadConfig();
-                            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-                            document.getElementById('adminSection').classList.add('active');
-
-                            showToast('Succes!', 'Loting succesvol aangemaakt!', 'success');
-                        } else {
-                            showToast('Fout', data.message, 'error');
-                        }
-                    } catch (err) {
-                        showToast('Fout', 'Kon loting niet aanmaken', 'error');
-                    }
-                }
-            );
-        }
-
-        async function deleteLottery() {
-            showModal(
-                'Loting verwijderen',
-                'Weet je zeker dat je deze loting wilt verwijderen? Dit kan niet ongedaan worden gemaakt!',
-                '⚠️',
-                'Ja, verwijder',
-                async () => {
-                    try {
-                        const response = await fetch('/api/admin/delete', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                eventUrl,
-                                username: adminUsername,
-                                password: adminPassword
-                            })
-                        });
-
-                        const data = await response.json();
-
-                        if (data.success) {
-                            showToast('Verwijderd', 'Loting is verwijderd', 'success');
-                            logout();
-                        } else {
-                            showToast('Fout', data.message, 'error');
-                        }
-                    } catch (err) {
-                        showToast('Fout', 'Kon loting niet verwijderen', 'error');
-                    }
-                },
-                'danger'
-            );
-        }
-
-        function copyUrl(url) {
-            navigator.clipboard.writeText(url).then(() => {
-                showToast('Gekopieerd!', 'URL is naar je klembord gekopieerd', 'success');
-            }).catch(() => {
-                showToast('Fout', 'Kon URL niet kopiëren', 'error');
-            });
-        }
-
-        // Toast notifications
-        function showToast(title, message, type = 'info') {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-
-            const icons = {
-                success: '✅',
-                error: '❌',
-                info: 'ℹ️'
+        let editing = null;
+
+        const auth = () => ({ eventUrl, ...creds });
+        const show = id => showScreen(id);
+
+        // --- Stap 1 en inloggen ---
+        $('setupForm').addEventListener('submit', e => {
+            e.preventDefault();
+            setup = {
+                eventName: $('eventName').value, adminUsername: $('adminUsername').value,
+                adminPassword: $('adminPassword').value, adminEmail: $('adminEmail').value
             };
+            show('peopleScreen');
+            $('nameInput').focus();
+        });
+        $('toLogin').onclick = () => show('loginScreen');
+        $('toSetup').onclick = () => show('setupScreen');
 
-            toast.innerHTML = `
-                <div class="toast-icon">${icons[type] || icons.info}</div>
-                <div class="toast-content">
-                    <div class="toast-title">${escapeHtml(title)}</div>
-                    <div class="toast-message">${escapeHtml(message)}</div>
-                </div>
-            `;
+        $('loginForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            const code = $('loginCode').value.trim();
+            const next = { username: $('loginUsername').value.trim(), password: $('loginPassword').value.trim() };
+            const data = await api('/api/admin/login', { eventUrl: code, ...next });
+            if (!data.success) return toast('Inloggen mislukt', data.message, 'error');
+            eventUrl = code;
+            creds = next;
+            history.replaceState({}, '', `/admin/${eventUrl}`);
+            await enterDashboard();
+        });
 
-            container.appendChild(toast);
+        function logout(silent) {
+            creds = { username: '', password: '' };
+            people = []; families = {}; familyMode = false;
+            document.querySelectorAll('input').forEach(i => { i.value = ''; });
+            history.replaceState({}, '', '/admin.html');
+            eventUrl = null;
+            show('setupScreen');
+            if (!silent) toast('Uitgelogd');
+        }
+        $('logoutBtn').onclick = () => logout();
 
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
+        // --- Stap 2: deelnemers ---
+        function familyNames() { return [...new Set(Object.values(families))]; }
+
+        function renderPeople() {
+            $('familyList').innerHTML = familyNames().map(f => `<option value="${esc(f)}">`).join('');
+            $('peopleList').innerHTML = people.map((name, i) => `
+                <li><span class="who">${esc(name)}${familyMode ? `<button class="chip chip-btn" type="button" data-edit="${i}" title="Gezin wijzigen">${esc(families[name])}</button>` : ''}</span>
+                <span class="row-actions"><button class="btn btn-small btn-ghost" type="button" data-remove="${i}" aria-label="Verwijder ${esc(name)}">Verwijder</button></span></li>`).join('');
+
+            let hint = '';
+            if (people.length < MIN_PEOPLE) hint = `Nog ${MIN_PEOPLE - people.length} naam${MIN_PEOPLE - people.length === 1 ? '' : 'en'} nodig.`;
+            else if (familyMode && familyNames().length < 2) hint = 'Je hebt minimaal 2 gezinnen nodig.';
+            $('peopleHint').textContent = hint;
+            $('peopleHint').classList.toggle('hidden', !hint);
+            $('createBtn').disabled = !!hint;
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        $('familyToggle').onclick = async () => {
+            if (people.length && !(await askConfirm('Lijst wissen?', 'Als je van modus wisselt, begin je met een lege lijst.', 'Wis de lijst'))) return;
+            people = []; families = {};
+            familyMode = !familyMode;
+            $('familyToggle').setAttribute('aria-pressed', familyMode);
+            $('familyField').classList.toggle('hidden', !familyMode);
+            $('familyInput').required = familyMode;
+            renderPeople();
+            $('nameInput').focus();
+        };
 
-        // Recovery functions
-        let currentRecoveryUrl = '';
+        $('addForm').addEventListener('submit', e => {
+            e.preventDefault();
+            const name = $('nameInput').value.trim().replace(/\s+/g, ' ');
+            const family = $('familyInput').value.trim();
+            if (people.some(p => p.toLowerCase() === name.toLowerCase())) return toast('Die naam staat er al', 'Elke naam moet uniek zijn.', 'error');
+            people.push(name);
+            if (familyMode) families[name] = family;
+            $('nameInput').value = '';
+            renderPeople();
+            $('nameInput').focus();
+        });
 
-        function showRecoveryModal() {
-            document.getElementById('recoveryModal').classList.add('active');
-            document.getElementById('recoveryEmail').value = '';
-            document.getElementById('recoveryLinkBox').style.display = 'none';
-            currentRecoveryUrl = '';
-        }
-
-        function closeRecoveryModal() {
-            document.getElementById('recoveryModal').classList.remove('active');
-        }
-
-        async function createRecoverySession() {
-            const recoveryEmail = document.getElementById('recoveryEmail').value.trim();
-
-            if (!recoveryEmail) {
-                showToast('Validatie', 'Voer een emailadres in', 'error');
-                return;
+        $('peopleList').addEventListener('click', e => {
+            const rm = e.target.closest('[data-remove]');
+            const ed = e.target.closest('[data-edit]');
+            if (rm) {
+                const [name] = people.splice(+rm.dataset.remove, 1);
+                delete families[name];
+                renderPeople();
+            } else if (ed) {
+                editing = people[+ed.dataset.edit];
+                $('familyDialogTitle').textContent = `Gezin van ${editing}`;
+                $('familyEdit').value = families[editing];
+                $('familyDialog').showModal();
             }
+        });
 
-            if (!recoveryEmail.includes('@')) {
-                showToast('Validatie', 'Voer een geldig emailadres in', 'error');
-                return;
-            }
+        $('familyDialog').addEventListener('close', () => {
+            const value = $('familyEdit').value.trim();
+            if ($('familyDialog').returnValue === 'ok' && value && editing) { families[editing] = value; renderPeople(); }
+        });
 
-            try {
-                const response = await fetch('/api/recovery/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        eventUrl: eventUrl,
-                        username: adminUsername,
-                        password: adminPassword,
-                        recoveryEmail: recoveryEmail
-                    })
-                });
+        $('backBtn').onclick = () => show('setupScreen');
 
-                const data = await response.json();
+        $('createBtn').onclick = async () => {
+            if (!(await askConfirm('Loting aanmaken?', `Er wordt geloot voor ${people.length} mensen. Daarna kun je de namen niet meer wijzigen.`, 'Ja, maak aan'))) return;
+            $('createBtn').disabled = true;
+            const data = await api('/api/admin/create', { ...setup, participants: people, families, familyMode });
+            if (!data.success) { renderPeople(); return toast('Aanmaken mislukt', data.message, 'error'); }
+            eventUrl = data.eventUrl;
+            creds = { username: setup.adminUsername.trim(), password: setup.adminPassword.trim() };
+            history.pushState({}, '', `/admin/${eventUrl}`);
+            await enterDashboard();
+            toast('Je loting staat klaar', data.message, 'success');
+        };
 
-                if (data.success) {
-                    currentRecoveryUrl = data.fullUrl;
-                    document.getElementById('recoveryUrl').textContent = data.fullUrl;
-                    document.getElementById('recoveryLinkBox').style.display = 'block';
-                    showToast('Succes', 'Recovery link aangemaakt!', 'success');
-                } else {
-                    showToast('Fout', data.message, 'error');
-                }
-            } catch (err) {
-                console.error('Error creating recovery session:', err);
-                showToast('Fout', 'Kon recovery sessie niet aanmaken', 'error');
-            }
-        }
-
-        function copyRecoveryUrl() {
-            if (!currentRecoveryUrl) return;
-
-            navigator.clipboard.writeText(currentRecoveryUrl).then(() => {
-                showToast('Gekopieerd!', 'Recovery link gekopieerd naar klembord', 'success');
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-                showToast('Fout', 'Kon link niet kopiëren', 'error');
+        // --- Dashboard ---
+        async function enterDashboard() {
+            const ok = await loadDashboard();
+            if (!ok) return;
+            show('dashScreen');
+            joinRoom('join-event', eventUrl, {
+                'participant-viewed': loadDashboard,
+                'lottery-reset': () => { if (eventUrl) { toast('Loting verwijderd'); logout(true); } }
             });
         }
+
+        async function loadDashboard() {
+            if (!eventUrl) return false;
+            const data = await api('/api/admin/config', auth());
+            if (!data.success) { toast('Kon de loting niet laden', data.message, 'error'); logout(true); return false; }
+
+            const total = data.participants.length;
+            const done = data.viewedBy.length;
+            const pct = total ? Math.round((done / total) * 100) : 0;
+            $('dashTitle').textContent = data.eventName;
+            $('dashDate').textContent = data.created ? `Aangemaakt op ${new Date(data.created).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}` : '';
+            $('progressText').textContent = done === total ? 'Iedereen heeft getrokken' : `${done} van ${total} hebben getrokken`;
+            $('meter').style.setProperty('--pct', pct + '%');
+            $('meter').setAttribute('aria-valuenow', pct);
+            $('shareUrl').value = `${location.origin}/event/${eventUrl}`;
+            $('adminUrl').value = `${location.origin}/admin/${eventUrl}`;
+            const viewed = new Set(data.viewedBy);
+            $('dashPeople').innerHTML = data.participants.map(p => `
+                <li><span class="who">${esc(p)}${data.familyMode && data.families[p] ? `<span class="chip">${esc(data.families[p])}</span>` : ''}</span>
+                ${viewed.has(p) ? '<span class="done">getrokken</span>' : '<span class="chip">wacht nog</span>'}</li>`).join('');
+            return true;
+        }
+
+        document.addEventListener('click', e => {
+            const btn = e.target.closest('[data-copy]');
+            if (!btn) return;
+            const input = $(btn.dataset.copy);
+            input.select();
+            copyText(input.value);
+        });
+
+        $('deleteBtn').onclick = async () => {
+            if (!(await askConfirm('Loting verwijderen?', 'Alle namen en lootjes worden gewist. Dit kan niet ongedaan worden gemaakt.', 'Ja, verwijder', true))) return;
+            const data = await api('/api/admin/delete', auth());
+            if (!data.success) return toast('Verwijderen mislukt', data.message, 'error');
+            logout(true);
+            toast('Loting verwijderd', '', 'success');
+        };
+
+        // --- Herstel ---
+        $('recoveryBtn').onclick = () => {
+            $('recoveryEmail').value = '';
+            $('recoveryResult').classList.add('hidden');
+            $('recoveryDialog').showModal();
+        };
+        $('recoveryCreate').onclick = async () => {
+            const recoveryEmail = $('recoveryEmail').value.trim();
+            if (!recoveryEmail) return toast('Vul een e-mailadres in', '', 'error');
+            const data = await api('/api/recovery/create', { ...auth(), recoveryEmail });
+            if (!data.success) return toast('Link maken mislukt', data.message, 'error');
+            $('recoveryUrl').value = data.fullUrl;
+            $('recoveryResult').classList.remove('hidden');
+        };
+
+        $('recoveryEmail').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('recoveryCreate').click(); } });
+
+        // --- Start ---
+        if (pathCode) { $('loginCode').value = pathCode; show('loginScreen'); $('loginUsername').focus(); }
+        else show('setupScreen');
+        renderPeople();
     </script>
 </body>
 </html>

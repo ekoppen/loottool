@@ -6,8 +6,4 @@ services:
       - "3512:3000"
     env_file:
       - .env
-    volumes:
-      - ./data:/app/data
-      # Don't mount node_modules or JS files - use container versions
-      # This prevents binary compatibility issues with better-sqlite3
     restart: unless-stopped

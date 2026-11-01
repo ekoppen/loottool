@@ -1,416 +1,232 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const http = require('http');
-const socketIO = require('socket.io');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const db = require('./database');
+const { Server } = require('socket.io');
+const store = require('./store');
+const { createAssignments } = require('./assign');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIO(server);
+const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
+const baseUrl = () => process.env.BASE_URL || `http://localhost:${PORT}`;
+const MIN_PARTICIPANTS = 3;
+const MAX_PARTICIPANTS = 50; // past in één Apenkaas-transactie (max. 100 acties)
 
-// Email transporter setup
-let emailTransporter = null;
-try {
-    if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
-        emailTransporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.GMAIL_USER,
-                pass: process.env.GMAIL_APP_PASSWORD
-            }
-        });
-        console.log('📧 Email service configured');
-    } else {
-        console.log('⚠️  Email service not configured (missing GMAIL_USER or GMAIL_APP_PASSWORD)');
-    }
-} catch (error) {
-    console.error('Error setting up email transporter:', error);
-    emailTransporter = null;
-}
+if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || true);
 
-// Function to send admin credentials email
-async function sendAdminCredentialsEmail(email, eventName, eventUrl, username, password) {
-    if (!emailTransporter) {
-        console.log('Email not sent - transporter not configured');
-        return false;
-    }
+// --- E-mail ---
+const emailTransporter = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
+    ? nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD } })
+    : null;
 
-    const adminUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/admin/${eventUrl}`;
-    const participantUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/event/${eventUrl}`;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-    const mailOptions = {
-        from: process.env.GMAIL_USER,
-        to: email,
-        subject: `Je Sinterklaas Lootjes - ${eventName}`,
-        html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h1 style="color: #c41e3a;">🎁 Sinterklaas Lootjes</h1>
-                <h2>Je loting is aangemaakt!</h2>
-                <p>Beste organisator,</p>
-                <p>Je loting "<strong>${eventName}</strong>" is succesvol aangemaakt. Hier zijn je inloggegevens:</p>
-
-                <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <h3 style="margin-top: 0;">Admin Gegevens</h3>
-                    <p><strong>Gebruikersnaam:</strong> ${username}</p>
-                    <p><strong>Wachtwoord:</strong> ${password}</p>
-                    <p><strong>Admin URL:</strong><br><a href="${adminUrl}">${adminUrl}</a></p>
-                </div>
-
-                <div style="background: #e8f5e9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <h3 style="margin-top: 0;">Deelnemers Link</h3>
-                    <p>Deel deze link met je deelnemers:</p>
-                    <p><a href="${participantUrl}">${participantUrl}</a></p>
-                </div>
-
-                <p style="color: #666; font-size: 14px;">
-                    <strong>⚠️ Belangrijk:</strong> Bewaar deze email goed. Je hebt deze gegevens nodig om je loting te beheren.
-                </p>
-
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                <p style="color: #999; font-size: 12px;">
-                    Dit is een automatisch gegenereerde email van Sinterklaas Lootjes.
-                </p>
-            </div>
-        `
-    };
-
+async function sendMail(to, subject, html) {
+    if (!emailTransporter) return false;
     try {
-        await emailTransporter.sendMail(mailOptions);
-        console.log(`📧 Email sent to ${email} for event ${eventUrl}`);
+        await emailTransporter.sendMail({ from: process.env.GMAIL_USER, to, subject, html });
         return true;
     } catch (error) {
-        console.error('Failed to send email:', error);
+        console.error('Mail versturen mislukt:', error.message);
         return false;
     }
 }
 
-// Function to send recovery email
-async function sendRecoveryEmail(email, eventName, recipientName) {
-    if (!emailTransporter) {
-        console.log('Recovery email not sent - transporter not configured');
-        return false;
-    }
+const mailFrame = body => `
+    <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto; color: #2a1810;">
+        <h1 style="color: #b11e2d;">Sinterklaas Lootjes</h1>
+        ${body}
+        <hr style="border: none; border-top: 1px solid #e6d8c0; margin: 28px 0;">
+        <p style="color: #8a7a68; font-size: 12px;">Automatisch bericht van Sinterklaas Lootjes.</p>
+    </div>`;
 
-    const mailOptions = {
-        from: process.env.GMAIL_USER,
-        to: email,
-        subject: `Je Sinterklaas Lootje - ${eventName}`,
-        html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h1 style="color: #c41e3a;">🎁 Sinterklaas Lootjes</h1>
-                <h2>Je lootje herinnering</h2>
-                <p>Hallo!</p>
-                <p>Je vroeg om een herinnering voor de loting "<strong>${eventName}</strong>".</p>
+function sendAdminCredentialsEmail(email, eventName, eventUrl, username, password) {
+    const adminUrl = `${baseUrl()}/admin/${eventUrl}`;
+    const participantUrl = `${baseUrl()}/event/${eventUrl}`;
+    return sendMail(email, `Je Sinterklaas Lootjes - ${eventName}`, mailFrame(`
+        <h2>Je loting "${esc(eventName)}" staat klaar</h2>
+        <p><strong>Gebruikersnaam:</strong> ${esc(username)}<br><strong>Wachtwoord:</strong> ${esc(password)}</p>
+        <p><strong>Beheerlink:</strong><br><a href="${esc(adminUrl)}">${esc(adminUrl)}</a></p>
+        <p><strong>Link voor deelnemers:</strong><br><a href="${esc(participantUrl)}">${esc(participantUrl)}</a></p>
+        <p style="color: #8a7a68;">Bewaar deze mail: je hebt de gegevens nodig om je loting te beheren.</p>`));
+}
 
-                <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
-                    <h3 style="margin-top: 0; color: #856404;">Je hebt geloot voor:</h3>
-                    <p style="font-size: 24px; font-weight: bold; color: #856404; margin: 10px 0;">
-                        ${recipientName}
-                    </p>
-                </div>
+function sendRecoveryEmail(email, eventName, recipientName) {
+    return sendMail(email, `Je Sinterklaas lootje - ${eventName}`, mailFrame(`
+        <h2>Je lootje van "${esc(eventName)}"</h2>
+        <p>Jij mag een surprise maken voor:</p>
+        <p style="font-size: 26px; font-weight: bold; color: #b11e2d;">${esc(recipientName)}</p>
+        <p>Veel plezier met het uitzoeken van een cadeau!</p>`));
+}
 
-                <p style="color: #666; font-size: 14px;">
-                    Veel plezier met het uitzoeken van een leuk cadeau! 🎁
-                </p>
+// --- Middleware ---
+app.use(express.json({ limit: '100kb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                <p style="color: #999; font-size: 12px;">
-                    Dit is een automatisch gegenereerde email van Sinterklaas Lootjes.
-                </p>
-            </div>
-        `
+// ponytail: in-memory teller per IP, werkt voor één server-instantie.
+const hits = new Map();
+setInterval(() => hits.clear(), 60 * 1000).unref();
+function rateLimit(max) {
+    return (req, res, next) => {
+        const n = (hits.get(req.ip) || 0) + 1;
+        hits.set(req.ip, n);
+        if (n > max) return res.status(429).json({ success: false, message: 'Te veel pogingen, probeer het over een minuut opnieuw.' });
+        next();
     };
-
-    try {
-        await emailTransporter.sendMail(mailOptions);
-        console.log(`📧 Recovery email sent to ${email} with recipient: ${recipientName}`);
-        return true;
-    } catch (error) {
-        console.error('Failed to send recovery email:', error);
-        return false;
-    }
 }
+const strict = rateLimit(30);
 
-app.use(bodyParser.json());
-app.use(express.static('public'));
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
+const fail = (res, status, message) => res.status(status).json({ success: false, message });
 
-// Route for event URLs - serve the main index.html
-app.get('/event/:eventUrl', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// --- Validatie ---
+const cleanText = (v, max) => {
+    if (typeof v !== 'string') return null;
+    const t = v.replace(/\s+/g, ' ').trim();
+    return t && t.length <= max ? t : null;
+};
+const isEmail = v => typeof v === 'string' && v.length <= 200 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+const isCode = v => typeof v === 'string' && /^[a-f0-9]{16}$/.test(v);
+
+// --- Pagina's ---
+const page = name => (req, res) => res.sendFile(path.join(__dirname, 'public', name));
+app.get('/event/:eventUrl', page('index.html'));
+app.get('/admin/:eventUrl', page('admin.html'));
+app.get('/recovery/:recoveryUrl', page('recovery.html'));
+
+io.on('connection', socket => {
+    socket.on('join-event', code => isCode(code) && socket.join(`event:${code}`));
+    socket.on('join-recovery', code => isCode(code) && socket.join(`recovery:${code}`));
 });
 
-// Route for admin URLs - serve admin.html with event context
-app.get('/admin/:eventUrl', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-// Route for recovery URLs - serve recovery.html
-app.get('/recovery/:recoveryUrl', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'recovery.html'));
-});
-
-// Socket.IO connection handling
-io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-
-    // Join event room
-    socket.on('join-event', (eventUrl) => {
-        socket.join(`event:${eventUrl}`);
-        console.log(`Socket ${socket.id} joined event: ${eventUrl}`);
-    });
-
-    // Join admin room
-    socket.on('join-admin', () => {
-        socket.join('admin');
-        console.log(`Socket ${socket.id} joined admin room`);
-    });
-
-    // Join recovery room
-    socket.on('join-recovery', (recoveryUrl) => {
-        socket.join(`recovery:${recoveryUrl}`);
-        console.log(`Socket ${socket.id} joined recovery: ${recoveryUrl}`);
-    });
-
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
-    });
-});
-
-// Admin: Login to specific event
-app.post('/api/admin/login', (req, res) => {
+// --- Admin ---
+async function authAdmin(req, res) {
     const { eventUrl, username, password } = req.body;
+    if (!isCode(eventUrl) || typeof username !== 'string' || typeof password !== 'string') {
+        fail(res, 400, 'Alle velden zijn verplicht');
+        return false;
+    }
+    if (!(await store.verifyAdmin(eventUrl, username.trim(), password.trim()))) {
+        fail(res, 401, 'Ongeldige inloggegevens');
+        return false;
+    }
+    return true;
+}
 
-    if (!eventUrl || !username || !password) {
-        return res.status(400).json({ success: false, message: 'Alle velden zijn verplicht' });
+app.post('/api/admin/login', strict, wrap(async (req, res) => {
+    if (await authAdmin(req, res)) res.json({ success: true });
+}));
+
+app.post('/api/admin/config', strict, wrap(async (req, res) => {
+    if (!(await authAdmin(req, res))) return;
+    res.json({ success: true, ...(await store.getLotteryData(req.body.eventUrl)) });
+}));
+
+app.post('/api/admin/create', strict, wrap(async (req, res) => {
+    const { adminEmail, familyMode } = req.body;
+    const eventName = cleanText(req.body.eventName, 80);
+    const adminUsername = cleanText(req.body.adminUsername, 40);
+    const adminPassword = typeof req.body.adminPassword === 'string' ? req.body.adminPassword.trim() : '';
+
+    if (!eventName || !adminUsername || adminPassword.length < 4 || adminPassword.length > 200) {
+        return fail(res, 400, 'Loting-naam, gebruikersnaam en een wachtwoord van minimaal 4 tekens zijn verplicht');
+    }
+    if (adminEmail && !isEmail(adminEmail)) return fail(res, 400, 'Ongeldig e-mailadres');
+
+    const names = Array.isArray(req.body.participants) ? req.body.participants.map(n => cleanText(n, 40)) : [];
+    if (names.length < MIN_PARTICIPANTS || names.length > MAX_PARTICIPANTS || names.includes(null)) {
+        return fail(res, 400, `Je hebt ${MIN_PARTICIPANTS} tot ${MAX_PARTICIPANTS} geldige namen nodig`);
+    }
+    if (new Set(names.map(n => n.toLowerCase())).size !== names.length) {
+        return fail(res, 400, 'Elke naam mag maar één keer voorkomen (hoofdletters tellen niet mee)');
     }
 
-    const isValid = db.verifyAdmin(eventUrl, username, password);
-
-    if (isValid) {
-        res.json({ success: true });
-    } else {
-        res.status(401).json({ success: false, message: 'Ongeldige inloggegevens' });
-    }
-});
-
-// Admin: Get configuration for specific event
-app.get('/api/admin/config', async (req, res) => {
-    const { eventUrl } = req.query;
-
-    if (!eventUrl) {
-        return res.json({
-            participants: [],
-            families: {},
-            familyMode: false,
-            viewedBy: [],
-            eventUrl: null,
-            eventName: null
-        });
-    }
-
-    const lottery = db.getLotteryData(eventUrl);
-
-    if (lottery) {
-        res.json({
-            eventName: lottery.eventName,
-            participants: lottery.participants,
-            families: lottery.families,
-            familyMode: lottery.familyMode,
-            created: lottery.created,
-            viewedBy: lottery.viewedBy,
-            eventUrl: lottery.eventUrl
-        });
-    } else {
-        res.json({
-            participants: [],
-            families: {},
-            familyMode: false,
-            viewedBy: [],
-            eventUrl: null,
-            eventName: null
-        });
-    }
-});
-
-// Admin: Create new lottery
-app.post('/api/admin/create', async (req, res) => {
-    const { eventName, adminUsername, adminPassword, adminEmail, participants, families, familyMode } = req.body;
-
-    // Validation
-    if (!eventName || !adminUsername || !adminPassword) {
-        return res.status(400).json({ success: false, message: 'Event naam, gebruikersnaam en wachtwoord zijn verplicht' });
-    }
-
-    if (!participants || participants.length < 3) {
-        return res.status(400).json({ success: false, message: 'Minimaal 3 deelnemers nodig' });
-    }
-
-    // Create assignments
-    const assignments = createAssignments(participants, families, familyMode);
-
-    if (!assignments) {
-        return res.status(400).json({
-            success: false,
-            message: 'Kon geen geldige verdeling maken. Controleer gezinsverdeling.'
-        });
-    }
-
-    // Create lottery in database
-    const eventUrl = db.createLottery(eventName, adminUsername, adminPassword, participants, families, familyMode, assignments);
-
-    // Send email if provided
-    if (adminEmail && adminEmail.trim()) {
-        try {
-            await sendAdminCredentialsEmail(adminEmail, eventName, eventUrl, adminUsername, adminPassword);
-        } catch (error) {
-            console.error('Failed to send admin email:', error);
-            // Don't fail the request if email fails
+    const families = {};
+    if (familyMode) {
+        const input = req.body.families || {};
+        for (const name of names) {
+            const family = cleanText(input[name], 40);
+            if (!family) return fail(res, 400, `Geef ${name} een gezinsnaam`);
+            families[name] = family;
         }
+        if (new Set(Object.values(families)).size < 2) return fail(res, 400, 'Je hebt minimaal 2 gezinnen nodig');
     }
 
-    // Notify all admin clients for this event
-    io.to(`event:${eventUrl}`).emit('lottery-created', { eventUrl });
+    const assignments = createAssignments(names, families, !!familyMode);
+    if (!assignments) return fail(res, 400, 'Kon geen geldige verdeling maken. Controleer de gezinsverdeling.');
+
+    const eventUrl = await store.createLottery({
+        eventName, adminUsername, adminPassword, participants: names, families, familyMode: !!familyMode, assignments
+    });
+
+    let mailed = false;
+    if (adminEmail && adminEmail.trim()) {
+        mailed = await sendAdminCredentialsEmail(adminEmail.trim(), eventName, eventUrl, adminUsername, adminPassword);
+    }
 
     res.json({
         success: true,
-        message: adminEmail ? 'Loting succesvol aangemaakt! Check je email voor de inloggegevens.' : 'Loting succesvol aangemaakt!',
+        message: mailed ? 'Loting aangemaakt! Check je e-mail voor de inloggegevens.' : 'Loting aangemaakt!',
         eventUrl,
         adminUrl: `/admin/${eventUrl}`,
         participantUrl: `/event/${eventUrl}`
     });
-});
+}));
 
-// Admin: Delete lottery
-app.post('/api/admin/delete', async (req, res) => {
-    const { eventUrl, username, password } = req.body;
+app.post('/api/admin/delete', strict, wrap(async (req, res) => {
+    if (!(await authAdmin(req, res))) return;
+    await store.deleteLottery(req.body.eventUrl);
+    io.to(`event:${req.body.eventUrl}`).emit('lottery-reset');
+    res.json({ success: true, message: 'Loting verwijderd' });
+}));
 
-    if (!eventUrl || !username || !password) {
-        return res.status(400).json({ success: false, message: 'Alle velden zijn verplicht' });
-    }
+// --- Deelnemers ---
+app.post('/api/draw', rateLimit(120), wrap(async (req, res) => {
+    const name = cleanText(req.body.name, 40);
+    const { eventUrl } = req.body;
+    if (!name) return fail(res, 400, 'Voer je naam in');
+    if (!isCode(eventUrl)) return fail(res, 404, 'Deze loting bestaat niet. Vraag de organisator om de juiste link.');
 
-    const success = db.deleteLottery(eventUrl, username, password);
-
-    if (success) {
-        // Notify all clients of this event
-        io.to(`event:${eventUrl}`).emit('lottery-reset');
-
-        res.json({ success: true, message: 'Loting verwijderd' });
-    } else {
-        res.status(401).json({ success: false, message: 'Ongeldige inloggegevens' });
-    }
-});
-
-// Participant: Get their assignment
-app.post('/api/draw', async (req, res) => {
-    const { name, eventUrl } = req.body;
-
-    if (!name || name.trim() === '') {
-        return res.status(400).json({ success: false, message: 'Voer je naam in' });
-    }
-
-    const trimmedName = name.trim();
-
-    // Get assignment
-    const assignment = db.getAssignment(trimmedName, eventUrl);
-
+    const assignment = await store.getAssignment(eventUrl, name);
     if (!assignment) {
-        // Check if lottery exists
-        const status = db.getLotteryStatus(eventUrl);
-        if (!status.exists) {
-            return res.status(404).json({
-                success: false,
-                message: 'Er is nog geen loting aangemaakt. Neem contact op met de organisator.'
-            });
-        }
-
-        // Lottery exists but name not found
-        return res.status(404).json({
-            success: false,
-            message: 'Deze naam staat niet in de lijst. Controleer de spelling.'
-        });
+        const status = await store.getLotteryStatus(eventUrl);
+        return fail(res, 404, status.exists
+            ? 'Deze naam staat niet in de lijst. Controleer de spelling.'
+            : 'Deze loting bestaat niet (meer). Neem contact op met de organisator.');
     }
 
-    // Mark as viewed
-    const wasUpdated = db.markAsViewed(assignment.giver, eventUrl);
-
-    // Broadcast update to all clients in this event
-    if (wasUpdated) {
-        const status = db.getLotteryStatus(eventUrl);
+    if (await store.markAsViewed(assignment)) {
+        const status = await store.getLotteryStatus(eventUrl);
         io.to(`event:${eventUrl}`).emit('participant-viewed', {
-            name: assignment.giver,
-            viewedBy: status.viewedBy,
-            viewedCount: status.viewedCount
-        });
-
-        // Also notify admin
-        io.to('admin').emit('participant-viewed', {
-            name: assignment.giver,
-            viewedBy: status.viewedBy,
-            viewedCount: status.viewedCount
+            name: assignment.giver, viewedBy: status.viewedBy, viewedCount: status.viewedCount
         });
     }
 
-    res.json({
-        success: true,
-        giver: assignment.giver,
-        recipient: assignment.recipient,
-        family: assignment.family
-    });
-});
+    res.json({ success: true, giver: assignment.giver, recipient: assignment.recipient, family: assignment.family });
+}));
 
-// Participant: Check if lottery exists (with optional event URL)
-app.get('/api/status', async (req, res) => {
-    const eventUrl = req.query.eventUrl;
-    const status = db.getLotteryStatus(eventUrl);
-    res.json(status);
-});
+app.get('/api/status', wrap(async (req, res) => {
+    res.json(await store.getLotteryStatus(isCode(req.query.eventUrl) ? req.query.eventUrl : null));
+}));
 
-// Recovery: Create recovery session (admin only)
-app.post('/api/recovery/create', async (req, res) => {
-    const { eventUrl, username, password, recoveryEmail } = req.body;
+// --- Herstel ---
+app.post('/api/recovery/create', strict, wrap(async (req, res) => {
+    if (!(await authAdmin(req, res))) return;
+    if (!isEmail(req.body.recoveryEmail)) return fail(res, 400, 'Voer een geldig e-mailadres in');
+    if (!emailTransporter) return fail(res, 503, 'E-mail is niet ingesteld op de server, herstel kan dus geen mail sturen.');
 
-    if (!eventUrl || !username || !password || !recoveryEmail) {
-        return res.status(400).json({ success: false, message: 'Alle velden zijn verplicht' });
-    }
+    const recoveryUrl = await store.createRecoverySession(req.body.eventUrl, req.body.recoveryEmail.trim());
+    if (!recoveryUrl) return fail(res, 404, 'Loting niet gevonden');
+    res.json({ success: true, recoveryUrl, fullUrl: `${baseUrl()}/recovery/${recoveryUrl}` });
+}));
 
-    // Verify admin credentials
-    const isValid = db.verifyAdmin(eventUrl, username, password);
-    if (!isValid) {
-        return res.status(401).json({ success: false, message: 'Ongeldige inloggegevens' });
-    }
-
-    // Create recovery session
-    const recoveryUrl = db.createRecoverySession(eventUrl, recoveryEmail);
-
-    if (!recoveryUrl) {
-        return res.status(404).json({ success: false, message: 'Event niet gevonden' });
-    }
-
-    const fullRecoveryUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/recovery/${recoveryUrl}`;
-
-    res.json({
-        success: true,
-        message: 'Recovery sessie aangemaakt',
-        recoveryUrl: recoveryUrl,
-        fullUrl: fullRecoveryUrl
-    });
-});
-
-// Recovery: Get recovery session data
-app.get('/api/recovery/:recoveryUrl', async (req, res) => {
-    const { recoveryUrl } = req.params;
-
-    const session = db.getRecoverySession(recoveryUrl);
-
-    if (!session) {
-        return res.status(404).json({ success: false, message: 'Recovery sessie niet gevonden' });
-    }
-
-    // Return data without revealing which names were clicked
+app.get('/api/recovery/:recoveryUrl', wrap(async (req, res) => {
+    const session = isCode(req.params.recoveryUrl) && await store.getRecoverySession(req.params.recoveryUrl);
+    if (!session) return fail(res, 404, 'Herstelsessie niet gevonden');
+    // Geen klikgegevens teruggeven: wie wat aanklikte blijft geheim.
     res.json({
         success: true,
         eventName: session.eventName,
@@ -419,140 +235,47 @@ app.get('/api/recovery/:recoveryUrl', async (req, res) => {
         totalParticipants: session.totalParticipants,
         emailSent: session.emailSent
     });
-});
+}));
 
-// Recovery: Register a click
-app.post('/api/recovery/click', async (req, res) => {
+app.post('/api/recovery/click', rateLimit(120), wrap(async (req, res) => {
     const { recoveryUrl, recipientName } = req.body;
+    if (!isCode(recoveryUrl) || typeof recipientName !== 'string') return fail(res, 400, 'Ongeldige aanvraag');
 
-    if (!recoveryUrl || !recipientName) {
-        return res.status(400).json({ success: false, message: 'Ongeldige aanvraag' });
-    }
+    const result = await store.registerRecoveryClick(recoveryUrl, recipientName);
+    if (!result.success) return fail(res, 400, result.error);
 
-    const result = db.registerRecoveryClick(recoveryUrl, recipientName);
+    const room = io.to(`recovery:${recoveryUrl}`);
+    const counts = { clickCount: result.clickCount, totalParticipants: result.totalParticipants };
 
-    if (!result.success) {
-        return res.status(400).json(result);
-    }
-
-    // If we should send email (N-1 clicks reached)
     if (result.shouldSendEmail) {
-        try {
-            const session = db.getRecoverySession(recoveryUrl);
-            await sendRecoveryEmail(result.recoveryEmail, session.eventName, result.missingName);
-            db.markRecoveryEmailSent(result.sessionId);
-
-            // Broadcast to all clients in recovery room
-            io.to(`recovery:${recoveryUrl}`).emit('recovery-completed', {
-                clickCount: result.clickCount,
-                totalParticipants: result.totalParticipants
-            });
-
-            return res.json({
-                success: true,
-                message: 'Bedankt! Email is verstuurd naar de persoon die het vergeten was.',
-                clickCount: result.clickCount,
-                totalParticipants: result.totalParticipants,
-                emailSent: true
-            });
-        } catch (error) {
-            console.error('Failed to send recovery email:', error);
-            return res.status(500).json({
-                success: false,
-                message: 'Kon email niet versturen'
-            });
+        const sent = await sendRecoveryEmail(result.recoveryEmail, result.eventName, result.missingName);
+        if (!sent) {
+            await store.removeRecoveryClick(result.clickId); // opnieuw proberen blijft mogelijk
+            return fail(res, 503, 'De e-mail kon niet worden verstuurd. Probeer het zo nog eens.');
         }
+        await store.markRecoveryEmailSent(result.session);
+        room.emit('recovery-completed', counts);
+        return res.json({ success: true, message: 'Bedankt! De mail is onderweg naar degene die het vergeten was.', ...counts, emailSent: true });
     }
 
-    // Broadcast update to all clients in recovery room
-    io.to(`recovery:${recoveryUrl}`).emit('recovery-click', {
-        clickCount: result.clickCount,
-        totalParticipants: result.totalParticipants
-    });
+    room.emit('recovery-click', counts);
+    res.json({ success: true, message: 'Bedankt voor je klik!', ...counts, emailSent: false });
+}));
 
-    res.json({
-        success: true,
-        message: 'Bedankt voor je klik!',
-        clickCount: result.clickCount,
-        totalParticipants: result.totalParticipants,
-        emailSent: false
-    });
+// --- Fouten ---
+app.use((err, req, res, next) => {
+    console.error(req.method, req.path, err);
+    if (res.headersSent) return next(err);
+    if (err.type === 'entity.parse.failed' || err.type === 'entity.too.large') return fail(res, 400, 'Ongeldige aanvraag');
+    fail(res, 500, 'Er ging iets mis. Probeer het zo nog eens.');
 });
 
-// Recovery: Get recovery sessions for an event (admin only)
-app.get('/api/recovery/sessions/:eventUrl', async (req, res) => {
-    const { eventUrl } = req.params;
-    const { username, password } = req.query;
-
-    if (!username || !password) {
-        return res.status(401).json({ success: false, message: 'Authenticatie vereist' });
-    }
-
-    // Verify admin credentials
-    const isValid = db.verifyAdmin(eventUrl, username, password);
-    if (!isValid) {
-        return res.status(401).json({ success: false, message: 'Ongeldige inloggegevens' });
-    }
-
-    const sessions = db.getRecoverySessionsForEvent(eventUrl);
-    res.json({ success: true, sessions });
-});
-
-// Create assignments algorithm
-function createAssignments(names, families, familyMode) {
-    let attempts = 0;
-    const maxAttempts = 1000;
-
-    while (attempts < maxAttempts) {
-        let result = {};
-        let availableReceivers = [...names];
-        let success = true;
-
-        // Shuffle names for randomness
-        let shuffledGivers = [...names].sort(() => Math.random() - 0.5);
-
-        for (let giver of shuffledGivers) {
-            // Filter available receivers
-            let validReceivers = availableReceivers.filter(receiver => {
-                // Can't give to yourself
-                if (receiver === giver) return false;
-
-                // In family mode, can't give to same family
-                if (familyMode && families[giver] === families[receiver]) {
-                    return false;
-                }
-
-                return true;
-            });
-
-            if (validReceivers.length === 0) {
-                success = false;
-                break;
-            }
-
-            // Pick random valid receiver
-            let receiver = validReceivers[Math.floor(Math.random() * validReceivers.length)];
-            result[giver] = receiver;
-
-            // Remove receiver from available pool
-            availableReceivers = availableReceivers.filter(r => r !== receiver);
-        }
-
-        if (success && Object.keys(result).length === names.length) {
-            return result;
-        }
-
-        attempts++;
-    }
-
-    return null;
+if (require.main === module) {
+    store.assertConfigured();
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`Sinterklaas Lootjes draait op http://0.0.0.0:${PORT} (backend: Apenkaas)`);
+        console.log(emailTransporter ? 'E-mail ingesteld' : 'E-mail niet ingesteld: herstel-mails en inlogmails staan uit');
+    });
 }
 
-// Start server
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🎅 Sinterklaas Lootjes Server draait op http://0.0.0.0:${PORT}`);
-    console.log(`🔧 Admin interface: http://0.0.0.0:${PORT}/admin.html`);
-    console.log(`🎁 Deelnemers interface: http://0.0.0.0:${PORT}`);
-    console.log(`🔌 WebSocket server actief`);
-    console.log(`✨ Multi-tenant: elke loting heeft eigen admin credentials`);
-});
+module.exports = { app, server };
