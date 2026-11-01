@@ -36,7 +36,7 @@ function mailAllowed(kind, to, ip) {
     while (sentMail.length && sentMail[0].at < cutoff) sentMail.shift();
     const addr = to.toLowerCase();
     const ofKind = sentMail.filter(m => m.kind === kind);
-    if (sentMail.length >= 40 || ofKind.length >= MAIL_KIND_CAP[kind]) return false;
+    if (sentMail.length >= 40 || ofKind.length >= (MAIL_KIND_CAP[kind] ?? 0)) return false; // onbekende soort: geweigerd
     if (ofKind.filter(m => m.to === addr).length >= 3) return false;
     if (ip && ofKind.filter(m => m.ip === ip).length >= 5) return false;
     sentMail.push({ kind, to: addr, ip, at: Date.now() });
