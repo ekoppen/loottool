@@ -7,6 +7,7 @@ const { createAssignments } = require('./assign');
 
 // --- nep-Apenkaas ---
 const docs = {}; // collectionId -> Map(id -> doc)
+const files = new Set(); // ids van geüploade bestanden in de nep-opslag
 const UNIQUE = { kliks: ['recoveryUrl', 'naam'], deelnemers: ['eventUrl', 'naamLower'] };
 
 function fakeCreate(coll, data, id = crypto.randomUUID()) {
@@ -25,10 +26,11 @@ const fake = http.createServer((req, res) => {
     req.on('data', c => (raw += c));
     req.on('end', () => {
         const send = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+        if (req.url === '/upload') { res.writeHead(204); return res.end(); }
         if (req.headers.authorization !== 'ApiKey testkey' && !/\/(oauth\/token|logout)$/.test(req.url)) return send(401, { message: 'nee' });
         const url = new URL(req.url, 'http://x');
         const body = raw ? JSON.parse(raw) : {};
-        const m = url.pathname.match(/^\/api\/t1\/(?:collections\/([^/]+)\/documents(?:\/([^/]+))?|(transactions)|(oauth\/token)|(logout))$/);
+        const m = url.pathname.match(/^\/api\/t1\/(?:collections\/([^/]+)\/documents(?:\/([^/]+))?|(transactions)|(oauth\/token)|(logout)|storage\/buckets\/([^/]+)\/files|storage\/files\/([^/]+))$/);
         try {
             if (m && m[4]) { // oauth/token: code 'good' = gebruiker u1, 'other' = u2
                 const users = { good: { id: 'u1', email: 'a@b.nl' }, other: { id: 'u2', email: 'c@d.nl' } };
@@ -36,6 +38,12 @@ const fake = http.createServer((req, res) => {
                 return user ? send(200, { accessToken: 'x', refreshToken: 'r', user }) : send(400, { error: 'invalid_grant' });
             }
             if (m && m[5]) return send(200, { ok: true });
+            if (m && m[6]) { // bestand aanmaken: metadata + uploadgegevens
+                const file = { id: crypto.randomUUID() };
+                files.add(file.id);
+                return send(200, { file, uploadUrl: `http://127.0.0.1:${fake.address().port}/upload`, fields: { key: 'k' } });
+            }
+            if (m && m[7]) { files.delete(m[7]); return send(200, { ok: true }); }
             if (m && m[3]) {
                 const snapshot = Object.fromEntries(Object.entries(docs).map(([k, v]) => [k, new Map(v)]));
                 try {
@@ -85,7 +93,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
         APENKAAS_URL: `http://127.0.0.1:${fake.address().port}`, APENKAAS_TENANT: 't1', APENKAAS_KEY: 'testkey',
         APENKAAS_LOTEN_COLLECTION_ID: 'loten', APENKAAS_DEELNEMERS_COLLECTION_ID: 'deelnemers',
         APENKAAS_HERSTEL_COLLECTION_ID: 'herstel', APENKAAS_HERSTEL_KLIKS_COLLECTION_ID: 'kliks',
-        APENKAAS_APP_ID: 'app1', SESSION_SECRET: 'x'.repeat(40), BASE_URL: 'http://localhost:3000'
+        RATE_LIMIT_STRICT: '1000', APENKAAS_ACHTERGRONDEN_BUCKET_ID: 'bucket1', APENKAAS_APP_ID: 'app1', SESSION_SECRET: 'x'.repeat(40), BASE_URL: 'http://localhost:3000'
     });
     const store = require('./store');
     const { server } = require('./server');
@@ -149,6 +157,34 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     assert.equal(racers.filter(r => r.status === 409 && r.recipient === undefined).length, 3);
     assert.equal((await call('POST', '/api/draw', { name: 'Anna', eventUrl })).status, 409);
 
+    // uiterlijk: alleen de eigenaar, met geldige waarden
+    const setDesign = (cookie, body) => call('POST', '/api/admin/design', { eventUrl, ...body }, cookie);
+    assert.equal((await setDesign(bob, { theme: 'nacht', welcome: 'Hoi' })).status, 403);
+    assert.equal((await setDesign(alice, { theme: 'neon', welcome: '' })).status, 400);
+    assert.equal((await setDesign(alice, { theme: 'nacht', welcome: 'x'.repeat(141) })).status, 400);
+    assert.ok((await setDesign(alice, { theme: 'nacht', welcome: '  Veel   plezier ' })).success);
+    assert.deepEqual((await call('GET', `/api/status?eventUrl=${eventUrl}`)).design, { theme: 'nacht', welcome: 'Veel plezier', backgroundUrl: null });
+
+    // achtergrondfoto: alleen JPEG, alleen de eigenaar; een nieuwe foto ruimt de oude op
+    const upload = (cookie, buf) => fetch(`${base}/api/admin/background?eventUrl=${eventUrl}`, {
+        method: 'POST', headers: { 'Content-Type': 'image/jpeg', Cookie: cookie }, body: buf
+    }).then(async r => ({ status: r.status, ...(await r.json()) }));
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(2000)]);
+    assert.equal((await upload(alice, Buffer.alloc(2000))).status, 400);
+    assert.equal((await upload(bob, jpeg)).status, 403);
+    const first = await upload(alice, jpeg);
+    assert.ok(first.success);
+    assert.match(first.backgroundUrl, /\/storage\/files\/[^/]+\/view$/);
+    assert.equal(files.size, 1);
+    const second = await upload(alice, jpeg);
+    assert.notEqual(second.backgroundUrl, first.backgroundUrl);
+    assert.equal(files.size, 1);
+    assert.equal((await call('GET', `/api/status?eventUrl=${eventUrl}`)).design.backgroundUrl, second.backgroundUrl);
+    assert.ok((await call('POST', '/api/admin/background/delete', { eventUrl }, alice)).success);
+    assert.equal(files.size, 0);
+    assert.equal((await call('GET', `/api/status?eventUrl=${eventUrl}`)).design.backgroundUrl, null);
+    assert.ok((await upload(alice, jpeg)).success); // blijft staan tot de loting wordt verwijderd
+
     // oude loting koppelen met de oude gegevens
     const oldUrl = 'b'.repeat(16);
     fakeCreate('loten', { eventUrl: oldUrl, eventName: 'Oud', adminUsername: 'eelko', adminHash: store.hashPassword('oudww'), familyMode: false });
@@ -166,9 +202,11 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
 
     // verwijderen: alleen de eigenaar, en het ruimt alles op
     assert.equal((await call('POST', '/api/admin/delete', { eventUrl }, bob)).status, 403);
-    assert.ok((await call('POST', '/api/admin/delete', { eventUrl }, alice)).success);
+    const deleted = await call('POST', '/api/admin/delete', { eventUrl }, alice);
+    assert.ok(deleted.success, JSON.stringify(deleted));
     assert.equal([...docs.deelnemers.values()].filter(d => d.data.eventUrl === eventUrl).length, 0);
     assert.equal((await call('GET', `/api/status?eventUrl=${eventUrl}`)).exists, false);
+    assert.equal(files.size, 0);
 
     // uitloggen wist de cookie
     assert.match((await fetch(base + '/api/auth/logout', { method: 'POST' })).headers.get('set-cookie'), /Max-Age=0/);

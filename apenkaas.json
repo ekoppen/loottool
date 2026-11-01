@@ -3,57 +3,184 @@
     {
       "naam": "loten",
       "schema": [
-        { "key": "eventUrl", "type": "string", "required": true },
-        { "key": "eventName", "type": "string", "required": true },
-        { "key": "ownerId", "type": "string" },
-        { "key": "ownerEmail", "type": "string" },
-        { "key": "adminUsername", "type": "string" },
-        { "key": "adminHash", "type": "string" },
-        { "key": "familyMode", "type": "boolean" },
-        { "key": "createdAt", "type": "string" }
+        {
+          "key": "eventUrl",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "eventName",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "ownerId",
+          "type": "string"
+        },
+        {
+          "key": "ownerEmail",
+          "type": "string"
+        },
+        {
+          "key": "adminUsername",
+          "type": "string"
+        },
+        {
+          "key": "adminHash",
+          "type": "string"
+        },
+        {
+          "key": "familyMode",
+          "type": "boolean"
+        },
+        {
+          "key": "createdAt",
+          "type": "string"
+        },
+        {
+          "key": "thema",
+          "type": "string"
+        },
+        {
+          "key": "welkomst",
+          "type": "string"
+        },
+        {
+          "key": "achtergrondId",
+          "type": "string"
+        }
       ],
       "createPermissions": [],
-      "unique": [["eventUrl"]],
-      "env": ["APENKAAS_LOTEN_COLLECTION_ID"]
+      "unique": [
+        [
+          "eventUrl"
+        ]
+      ],
+      "env": [
+        "APENKAAS_LOTEN_COLLECTION_ID"
+      ]
     },
     {
       "naam": "deelnemers",
       "schema": [
-        { "key": "eventUrl", "type": "string", "required": true },
-        { "key": "naam", "type": "string", "required": true },
-        { "key": "naamLower", "type": "string", "required": true },
-        { "key": "familie", "type": "string" },
-        { "key": "ontvanger", "type": "string", "required": true },
-        { "key": "bekeken", "type": "boolean" },
-        { "key": "bekekenOp", "type": "string" }
+        {
+          "key": "eventUrl",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "naam",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "naamLower",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "familie",
+          "type": "string"
+        },
+        {
+          "key": "ontvanger",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "bekeken",
+          "type": "boolean"
+        },
+        {
+          "key": "bekekenOp",
+          "type": "string"
+        }
       ],
       "createPermissions": [],
-      "unique": [["eventUrl", "naamLower"]],
-      "env": ["APENKAAS_DEELNEMERS_COLLECTION_ID"]
+      "unique": [
+        [
+          "eventUrl",
+          "naamLower"
+        ]
+      ],
+      "env": [
+        "APENKAAS_DEELNEMERS_COLLECTION_ID"
+      ]
     },
     {
       "naam": "herstel",
       "schema": [
-        { "key": "recoveryUrl", "type": "string", "required": true },
-        { "key": "eventUrl", "type": "string", "required": true },
-        { "key": "email", "type": "string", "required": true },
-        { "key": "emailSent", "type": "boolean" },
-        { "key": "createdAt", "type": "string" }
+        {
+          "key": "recoveryUrl",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "eventUrl",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "email",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "emailSent",
+          "type": "boolean"
+        },
+        {
+          "key": "createdAt",
+          "type": "string"
+        }
       ],
       "createPermissions": [],
-      "unique": [["recoveryUrl"]],
-      "env": ["APENKAAS_HERSTEL_COLLECTION_ID"]
+      "unique": [
+        [
+          "recoveryUrl"
+        ]
+      ],
+      "env": [
+        "APENKAAS_HERSTEL_COLLECTION_ID"
+      ]
     },
     {
       "naam": "herstel_kliks",
       "schema": [
-        { "key": "recoveryUrl", "type": "string", "required": true },
-        { "key": "naam", "type": "string", "required": true }
+        {
+          "key": "recoveryUrl",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "naam",
+          "type": "string",
+          "required": true
+        }
       ],
       "createPermissions": [],
-      "unique": [["recoveryUrl", "naam"]],
-      "env": ["APENKAAS_HERSTEL_KLIKS_COLLECTION_ID"]
+      "unique": [
+        [
+          "recoveryUrl",
+          "naam"
+        ]
+      ],
+      "env": [
+        "APENKAAS_HERSTEL_KLIKS_COLLECTION_ID"
+      ]
     }
   ],
-  "buckets": []
+  "buckets": [
+    {
+      "naam": "achtergronden",
+      "maxBestandsgrootte": 1572864,
+      "toegestaneMimetypes": [
+        "image/jpeg"
+      ],
+      "createPermissions": [],
+      "env": [
+        "APENKAAS_ACHTERGRONDEN_BUCKET_ID"
+      ]
+    }
+  ]
 }

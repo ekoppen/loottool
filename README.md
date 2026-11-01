@@ -18,7 +18,12 @@ Online lootjes trekken voor familie, vrienden en collega's. Iedereen trekt zelf,
    ```
 3. Organisatoren loggen in via de gehoste loginpagina van Apenkaas. Zet in de console bij de app (Apps, bewerken) de redirect-URI `<BASE_URL>/auth/callback` (bijvoorbeeld `https://lootjes.example.nl/auth/callback`, lokaal `http://localhost:3000/auth/callback`).
 4. Kopieer `.env.example` naar `.env` en vul tenant, sleutel, de vier collectie-id's uit de uitvoer, `APENKAAS_APP_ID` (UUID van de app) en `SESSION_SECRET` (`openssl rand -hex 32`) in.
-5. Starten: `npm install && npm start`, of `docker compose up -d` (poort 3512).
+5. Voor achtergrondfoto's gebruikt de app een bucket; `push.mjs` maakt hem aan en geeft `APENKAAS_ACHTERGRONDEN_BUCKET_ID` in de uitvoer. De sleutel heeft daarvoor ook `storage:read` en `storage:write` nodig.
+6. Starten: `npm install && npm start`, of `docker compose up -d` (poort 3512).
+
+## Uiterlijk per loting
+
+De organisator kiest per loting een kleurthema (vijf), een welkomsttekst en een achtergrondfoto. De foto wordt in de browser verkleind (JPEG, zonder locatiegegevens), via de server in Apenkaas-opslag gezet en op de deelnemerspagina's getoond via de permanente publieke link van Apenkaas.
 
 ## Tests
 

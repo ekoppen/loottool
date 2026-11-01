@@ -107,6 +107,7 @@
             </div>
 
             <div class="actions">
+                <button id="designBtn" class="btn btn-ghost btn-block" type="button">Uiterlijk aanpassen</button>
                 <button id="recoveryBtn" class="btn btn-ghost btn-block" type="button">Iemand is zijn lootje vergeten</button>
                 <button id="deleteBtn" class="btn btn-danger btn-block" type="button">Loting verwijderen</button>
                 <button id="toListBtn" class="btn btn-ghost btn-block" type="button">Alle lotingen</button>
@@ -142,6 +143,38 @@
             <div class="dialog-actions">
                 <button class="btn btn-ghost" value="cancel" formnovalidate>Annuleren</button>
                 <button class="btn" value="ok">Opslaan</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Uiterlijk -->
+    <dialog id="designDialog">
+        <form method="dialog" id="designForm">
+            <h2>Uiterlijk van je loting</h2>
+            <fieldset class="themes">
+                <legend>Kleur</legend>
+                <label class="theme"><input type="radio" name="theme" value="sint"><span><i style="--dot: #b3202f"></i>Sint-rood</span></label>
+                <label class="theme"><input type="radio" name="theme" value="dennen"><span><i style="--dot: #2e6b4f"></i>Dennengroen</span></label>
+                <label class="theme"><input type="radio" name="theme" value="nacht"><span><i style="--dot: #2f4b9a"></i>Winternacht</span></label>
+                <label class="theme"><input type="radio" name="theme" value="pepernoot"><span><i style="--dot: #8a5a2b"></i>Pepernoot</span></label>
+                <label class="theme"><input type="radio" name="theme" value="pruim"><span><i style="--dot: #7a2d7a"></i>Pruim</span></label>
+            </fieldset>
+            <div class="field"><label for="welcomeInput">Welkomsttekst voor deelnemers (niet verplicht)</label>
+                <input id="welcomeInput" maxlength="140" placeholder="Veel plezier dit jaar!">
+                <small>Staat boven de namenlijst. Maximaal 140 tekens.</small></div>
+            <div class="field photo">
+                <label for="photoPick">Achtergrondfoto</label>
+                <div id="photoPreview" class="photo-preview">Nog geen foto</div>
+                <div class="photo-actions">
+                    <button id="photoPick" class="btn btn-small btn-ghost" type="button">Foto kiezen</button>
+                    <button id="photoRemove" class="btn btn-small btn-ghost hidden" type="button">Foto verwijderen</button>
+                </div>
+                <input id="photoFile" type="file" accept="image/*" class="hidden">
+                <small>De foto wordt direct opgeslagen, verkleind en zonder locatiegegevens. Een rustige foto leest het fijnst.</small>
+            </div>
+            <div class="dialog-actions">
+                <button class="btn btn-ghost" value="cancel" formnovalidate>Sluiten</button>
+                <button class="btn" id="designSave" type="button">Opslaan</button>
             </div>
         </form>
     </dialog>
@@ -226,6 +259,7 @@
         // --- Mijn lotingen ---
         async function showList() {
             history.replaceState({}, '', '/admin.html');
+            applyDesign(null);
             const data = await call('/api/admin/lotteries');
             if (!data.success) return;
             $('myLotteries').innerHTML = data.lotteries.map(l => `
@@ -333,6 +367,8 @@
                 return showList();
             }
             eventUrl = code;
+            currentDesign = data.design;
+            applyDesign(currentDesign);
             renderDashboard(data);
             showScreen('dashScreen');
             if (!socket) {
@@ -392,6 +428,86 @@
             toast('Gekoppeld', 'Deze loting staat nu bij je account.', 'success');
             openLottery(eventUrl);
         });
+
+        // --- Uiterlijk ---
+        let currentDesign = { theme: 'sint', welcome: '', backgroundUrl: null };
+
+        function renderPhoto() {
+            const url = currentDesign.backgroundUrl;
+            $('photoPreview').style.backgroundImage = url ? `url("${encodeURI(url)}")` : '';
+            $('photoPreview').classList.toggle('filled', !!url);
+            $('photoPreview').textContent = url ? 'Huidige foto' : 'Nog geen foto';
+            $('photoRemove').classList.toggle('hidden', !url);
+        }
+
+        $('designBtn').onclick = () => {
+            document.querySelector(`input[name="theme"][value="${currentDesign.theme}"]`).checked = true;
+            $('welcomeInput').value = currentDesign.welcome;
+            renderPhoto();
+            $('designDialog').showModal();
+        };
+
+        // Kleur direct voor je ogen laten zien; sluiten zonder opslaan zet het terug.
+        $('designForm').addEventListener('change', e => {
+            if (e.target.name === 'theme') applyDesign({ ...currentDesign, theme: e.target.value });
+        });
+        $('designDialog').addEventListener('close', () => applyDesign(currentDesign));
+
+        $('designSave').onclick = async () => {
+            const theme = document.querySelector('input[name="theme"]:checked').value;
+            const welcome = $('welcomeInput').value;
+            const data = await call('/api/admin/design', { eventUrl, theme, welcome });
+            if (!data.success) return toast('Opslaan mislukt', data.message, 'error');
+            currentDesign = { ...currentDesign, theme, welcome: welcome.trim() };
+            $('designDialog').close('saved');
+            toast('Uiterlijk opgeslagen', '', 'success');
+        };
+
+        // Verkleint de foto in de browser: kleiner uploaden, en de camera-metadata (zoals locatie) verdwijnt.
+        async function toJpeg(file) {
+            const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+            const scale = Math.min(1, 1920 / Math.max(bmp.width, bmp.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(bmp.width * scale);
+            canvas.height = Math.round(bmp.height * scale);
+            canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+            for (const quality of [0.85, 0.75, 0.65, 0.5]) {
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+                if (blob && blob.size <= 1500 * 1024) return blob;
+            }
+            return null;
+        }
+
+        $('photoPick').onclick = () => $('photoFile').click();
+        $('photoFile').addEventListener('change', async () => {
+            const file = $('photoFile').files[0];
+            $('photoFile').value = '';
+            if (!file) return;
+            let blob = null;
+            try { blob = await toJpeg(file); } catch { /* geen afbeelding */ }
+            if (!blob) return toast('Die foto lukt niet', 'Kies een gewone foto (JPEG, PNG of WebP).', 'error');
+            $('photoPick').disabled = true;
+            try {
+                const res = await fetch(`/api/admin/background?eventUrl=${eventUrl}`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+                const data = await res.json();
+                if (!data.success) return toast('Uploaden mislukt', data.message, 'error');
+                currentDesign = { ...currentDesign, backgroundUrl: data.backgroundUrl };
+                applyDesign({ ...currentDesign, theme: document.querySelector('input[name="theme"]:checked').value });
+                renderPhoto();
+            } catch {
+                toast('Uploaden mislukt', 'Geen verbinding met de server.', 'error');
+            } finally {
+                $('photoPick').disabled = false;
+            }
+        });
+
+        $('photoRemove').onclick = async () => {
+            const data = await call('/api/admin/background/delete', { eventUrl });
+            if (!data.success) return toast('Verwijderen mislukt', data.message, 'error');
+            currentDesign = { ...currentDesign, backgroundUrl: null };
+            applyDesign({ ...currentDesign, theme: document.querySelector('input[name="theme"]:checked').value });
+            renderPhoto();
+        };
 
         // --- Herstel ---
         $('recoveryBtn').onclick = () => {

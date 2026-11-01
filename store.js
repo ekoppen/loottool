@@ -10,7 +10,8 @@ const cfg = () => ({
     loten: process.env.APENKAAS_LOTEN_COLLECTION_ID,
     deelnemers: process.env.APENKAAS_DEELNEMERS_COLLECTION_ID,
     herstel: process.env.APENKAAS_HERSTEL_COLLECTION_ID,
-    kliks: process.env.APENKAAS_HERSTEL_KLIKS_COLLECTION_ID
+    kliks: process.env.APENKAAS_HERSTEL_KLIKS_COLLECTION_ID,
+    achtergronden: process.env.APENKAAS_ACHTERGRONDEN_BUCKET_ID
 });
 
 function assertConfigured() {
@@ -79,6 +80,51 @@ const sameText = (a, b) => {
     return crypto.timingSafeEqual(x, y);
 };
 
+// --- Uiterlijk per loting ---
+const THEMES = ['sint', 'dennen', 'nacht', 'pepernoot', 'pruim'];
+
+// Publieke uiterlijk-gegevens van een loting; de foto komt via de permanente publieke link van Apenkaas.
+function designOf(lottery) {
+    const c = cfg();
+    return {
+        theme: THEMES.includes(lottery.thema) ? lottery.thema : 'sint',
+        welcome: lottery.welkomst || '',
+        backgroundUrl: lottery.achtergrondId ? `${c.url}/api/${c.tenant}/storage/files/${lottery.achtergrondId}/view` : null
+    };
+}
+
+const removeFile = id => api('DELETE', `/storage/files/${id}`).catch(() => {});
+
+async function saveDesign(lottery, { theme, welcome }) {
+    await update(cfg().loten, lottery, { thema: theme, welkomst: welcome });
+}
+
+// Zet een JPEG als achtergrond (publiek leesbaar) en ruimt de vorige foto op.
+async function setBackground(lottery, jpeg) {
+    const c = cfg();
+    if (!c.achtergronden) throw Object.assign(new Error('Foto-opslag is niet ingesteld'), { status: 503 });
+    const created = await api('POST', `/storage/buckets/${c.achtergronden}/files`, {
+        bestandsnaam: `${lottery.eventUrl}.jpg`, mimeType: 'image/jpeg', grootte: jpeg.length, readPermissions: ['any']
+    });
+    const form = new FormData();
+    Object.entries(created.fields).forEach(([k, v]) => form.append(k, v));
+    form.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'achtergrond.jpg');
+    const up = await fetch(created.uploadUrl, { method: 'POST', body: form, signal: AbortSignal.timeout(20000) });
+    if (!up.ok) {
+        await removeFile(created.file.id);
+        throw new Error(`Uploaden naar de opslag mislukte (${up.status})`);
+    }
+    await update(c.loten, lottery, { achtergrondId: created.file.id });
+    if (lottery.achtergrondId) await removeFile(lottery.achtergrondId);
+    return { ...lottery, achtergrondId: created.file.id };
+}
+
+async function clearBackground(lottery) {
+    if (!lottery.achtergrondId) return;
+    await update(cfg().loten, lottery, { achtergrondId: '' });
+    await removeFile(lottery.achtergrondId);
+}
+
 // --- Loten ---
 const getLottery = eventUrl => findOne(cfg().loten, { eventUrl });
 
@@ -134,6 +180,7 @@ async function deleteLottery(eventUrl) {
     del(c.deelnemers, await find(c.deelnemers, { eventUrl }));
     del(c.loten, [lottery]);
     await transact(ops);
+    if (lottery.achtergrondId) await removeFile(lottery.achtergrondId);
     return true;
 }
 
@@ -154,7 +201,8 @@ async function getLotteryData(eventUrl) {
         families,
         familyMode: !!lottery.familyMode,
         created: lottery.createdAt,
-        viewedBy: rows.filter(p => p.bekeken).map(p => p.naam)
+        viewedBy: rows.filter(p => p.bekeken).map(p => p.naam),
+        design: designOf(lottery)
     };
 }
 
@@ -170,7 +218,8 @@ async function getLotteryStatus(eventUrl) {
         participants: rows.map(p => p.naam),
         viewedBy,
         eventUrl,
-        eventName: lottery.eventName
+        eventName: lottery.eventName,
+        design: designOf(lottery)
     };
 }
 
@@ -205,6 +254,7 @@ async function getRecoverySession(recoveryUrl) {
     return {
         row: session,
         eventName: lottery.eventName,
+        design: designOf(lottery),
         recoveryEmail: session.email,
         participants: participants.map(p => p.naam),
         clicks: clicks.map(k => ({ id: k.id, name: k.naam })),
@@ -255,7 +305,7 @@ const removeRecoveryClick = clickId => api('DELETE', `/collections/${cfg().kliks
 const markRecoveryEmailSent = session => update(cfg().herstel, session, { emailSent: true });
 
 module.exports = {
-    assertConfigured, getLottery, isOwner, isClaimable, claimLottery, listLotteries, hashPassword,
+    assertConfigured, THEMES, designOf, saveDesign, setBackground, clearBackground, getLottery, isOwner, isClaimable, claimLottery, listLotteries, hashPassword,
     getLotteryData, getLotteryStatus, createLottery, deleteLottery,
     getAssignment, markAsViewed, createRecoverySession, getRecoverySession, registerRecoveryClick,
     removeRecoveryClick, markRecoveryEmailSent

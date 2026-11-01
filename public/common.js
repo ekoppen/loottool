@@ -74,3 +74,12 @@ function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
     $(id).classList.remove('hidden');
 }
+
+// Past het uiterlijk van een loting toe: kleurthema, welkomsttekst en achtergrondfoto. null = standaard.
+function applyDesign(design) {
+    const d = design || {};
+    document.body.dataset.theme = d.theme || 'sint';
+    const photo = d.backgroundUrl && /^https?:\/\//.test(d.backgroundUrl) ? d.backgroundUrl : null;
+    document.body.classList.toggle('has-photo', !!photo);
+    document.body.style.setProperty('--photo', photo ? `url("${encodeURI(photo)}")` : 'none');
+}

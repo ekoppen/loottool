@@ -84,6 +84,7 @@ function sendRecoveryEmail(email, eventName, recipientName, ip) {
 
 // --- Middleware ---
 app.use(express.json({ limit: '100kb' }));
+app.use(express.raw({ type: 'image/jpeg', limit: '1600kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ponytail: in-memory teller per IP, werkt voor één server-instantie.
@@ -97,7 +98,7 @@ function rateLimit(max) {
         next();
     };
 }
-const strict = rateLimit(30);
+const strict = rateLimit(Number(process.env.RATE_LIMIT_STRICT) || 30); // per minuut per IP; env alleen voor tests
 
 const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 const fail = (res, status, message) => res.status(status).json({ success: false, message });
@@ -181,6 +182,36 @@ app.post('/api/admin/claim', needUser, strict, wrap(async (req, res) => {
     if (!(await store.claimLottery(eventUrl, req.user, username.trim(), password.trim()))) {
         return fail(res, 401, 'Deze gegevens kloppen niet, of de loting is al gekoppeld aan een account.');
     }
+    res.json({ success: true });
+}));
+
+// --- Uiterlijk van een loting ---
+app.post('/api/admin/design', needUser, strict, wrap(async (req, res) => {
+    const lottery = await ownLottery(req, res, req.body.eventUrl);
+    if (!lottery) return;
+    const { theme } = req.body;
+    const welcome = typeof req.body.welcome === 'string' ? req.body.welcome.replace(/\s+/g, ' ').trim() : '';
+    if (!store.THEMES.includes(theme)) return fail(res, 400, 'Onbekend kleurthema');
+    if (welcome.length > 140) return fail(res, 400, 'De welkomsttekst mag maximaal 140 tekens zijn');
+    await store.saveDesign(lottery, { theme, welcome });
+    res.json({ success: true });
+}));
+
+// Body is een JPEG (de pagina verkleint de foto vooraf en haalt zo ook locatiegegevens uit de foto).
+app.post('/api/admin/background', needUser, strict, wrap(async (req, res) => {
+    const lottery = await ownLottery(req, res, req.query.eventUrl);
+    if (!lottery) return;
+    const jpeg = req.body;
+    const isJpeg = Buffer.isBuffer(jpeg) && jpeg.length > 1000 && jpeg[0] === 0xff && jpeg[1] === 0xd8 && jpeg[2] === 0xff;
+    if (!isJpeg) return fail(res, 400, 'Kies een JPEG-foto van maximaal 1,5 MB.');
+    const updated = await store.setBackground(lottery, jpeg);
+    res.json({ success: true, backgroundUrl: store.designOf(updated).backgroundUrl });
+}));
+
+app.post('/api/admin/background/delete', needUser, strict, wrap(async (req, res) => {
+    const lottery = await ownLottery(req, res, req.body.eventUrl);
+    if (!lottery) return;
+    await store.clearBackground(lottery);
     res.json({ success: true });
 }));
 
@@ -293,6 +324,7 @@ app.get('/api/recovery/:recoveryUrl', wrap(async (req, res) => {
     res.json({
         success: true,
         eventName: session.eventName,
+        design: session.design,
         participants: session.participants,
         clickCount: session.clickCount,
         totalParticipants: session.totalParticipants,

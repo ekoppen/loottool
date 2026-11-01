@@ -68,6 +68,7 @@
             if (!data.success) return fail(data.message || 'Herstelsessie niet gevonden.');
 
             $('eventName').textContent = data.eventName;
+            applyDesign(data.design);
             if (data.emailSent) return showScreen('doneScreen');
 
             $('tags').innerHTML = data.participants.map(n =>

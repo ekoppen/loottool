@@ -37,6 +37,7 @@
 
         <section id="listScreen" class="screen hidden">
             <h2>Zoek je naam</h2>
+            <p id="welcomeNote" class="note hidden" style="margin-bottom: 16px"></p>
             <p class="lead">Tik op het label met jouw naam om je lootje te zien. Dat kan maar één keer.</p>
             <ul id="tags" class="tags"></ul>
         </section>
@@ -89,6 +90,9 @@
             if (!status.exists) return showScreen('notFoundScreen');
             $('eventName').textContent = status.eventName;
             document.title = `${status.eventName} - Sinterklaas Lootjes`;
+            applyDesign(status.design);
+            $('welcomeNote').textContent = status.design.welcome;
+            $('welcomeNote').classList.toggle('hidden', !status.design.welcome);
             renderTags();
             showScreen('listScreen');
         }
