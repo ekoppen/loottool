@@ -24,20 +24,24 @@ const emailTransporter = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWOR
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// Begrenst uitgaande mail zodat de server geen mailrelay wordt: max. 30 per uur in totaal en 3 per adres.
+// Begrenst uitgaande mail zodat de server geen mailrelay wordt. Elke soort mail heeft een eigen budget,
+// zodat misbruik van de open "loting aanmaken" de herstelmail niet blokkeert.
+// Per uur: 30 per soort, 3 per adres en (alleen aanmaakmail) 5 per IP.
 // ponytail: in het geheugen, werkt voor één serverinstantie.
 const sentMail = [];
-function mailAllowed(to) {
+function mailAllowed(kind, to, ip) {
     const cutoff = Date.now() - 60 * 60 * 1000;
     while (sentMail.length && sentMail[0].at < cutoff) sentMail.shift();
     const addr = to.toLowerCase();
-    if (sentMail.length >= 30 || sentMail.filter(m => m.to === addr).length >= 3) return false;
-    sentMail.push({ to: addr, at: Date.now() });
+    const ofKind = sentMail.filter(m => m.kind === kind);
+    if (ofKind.length >= 30 || ofKind.filter(m => m.to === addr).length >= 3) return false;
+    if (ip && ofKind.filter(m => m.ip === ip).length >= 5) return false;
+    sentMail.push({ kind, to: addr, ip, at: Date.now() });
     return true;
 }
 
-async function sendMail(to, subject, html) {
-    if (!emailTransporter || !mailAllowed(to)) return false;
+async function sendMail(kind, to, subject, html, ip) {
+    if (!emailTransporter || !mailAllowed(kind, to, ip)) return false;
     try {
         await emailTransporter.sendMail({ from: process.env.GMAIL_USER, to, subject, html });
         return true;
@@ -56,19 +60,19 @@ const mailFrame = body => `
     </div>`;
 
 // Onderwerp is vast en het wachtwoord staat er bewust niet in: de maker kent het al.
-function sendAdminCredentialsEmail(email, eventName, eventUrl, username) {
+function sendAdminCredentialsEmail(email, eventName, eventUrl, username, ip) {
     const adminUrl = `${baseUrl()}/admin/${eventUrl}`;
     const participantUrl = `${baseUrl()}/event/${eventUrl}`;
-    return sendMail(email, 'Je Sinterklaas Lootjes-loting staat klaar', mailFrame(`
+    return sendMail('create', email, 'Je Sinterklaas Lootjes-loting staat klaar', mailFrame(`
         <h2>Je loting "${esc(eventName)}" staat klaar</h2>
         <p><strong>Gebruikersnaam:</strong> ${esc(username)}<br>Het wachtwoord is het wachtwoord dat je zelf hebt gekozen.</p>
         <p><strong>Beheerlink:</strong><br><a href="${esc(adminUrl)}">${esc(adminUrl)}</a></p>
         <p><strong>Link voor deelnemers:</strong><br><a href="${esc(participantUrl)}">${esc(participantUrl)}</a></p>
-        <p style="color: #8a7a68;">Bewaar deze mail: je hebt de gegevens nodig om je loting te beheren.</p>`));
+        <p style="color: #8a7a68;">Bewaar deze mail: je hebt de gegevens nodig om je loting te beheren.</p>`), ip);
 }
 
 function sendRecoveryEmail(email, eventName, recipientName) {
-    return sendMail(email, 'Je Sinterklaas lootje', mailFrame(`
+    return sendMail('recovery', email, 'Je Sinterklaas lootje', mailFrame(`
         <h2>Je lootje van "${esc(eventName)}"</h2>
         <p>Jij mag een surprise maken voor:</p>
         <p style="font-size: 26px; font-weight: bold; color: #b11e2d;">${esc(recipientName)}</p>
@@ -177,7 +181,7 @@ app.post('/api/admin/create', strict, wrap(async (req, res) => {
 
     let mailed = false;
     if (adminEmail && adminEmail.trim()) {
-        mailed = await sendAdminCredentialsEmail(adminEmail.trim(), eventName, eventUrl, adminUsername);
+        mailed = await sendAdminCredentialsEmail(adminEmail.trim(), eventName, eventUrl, adminUsername, req.ip);
     }
 
     res.json({
@@ -197,31 +201,43 @@ app.post('/api/admin/delete', strict, wrap(async (req, res) => {
 }));
 
 // --- Deelnemers ---
+const drawing = new Set();
 app.post('/api/draw', rateLimit(120), wrap(async (req, res) => {
     const name = cleanText(req.body.name, 40);
     const { eventUrl } = req.body;
     if (!name) return fail(res, 400, 'Voer je naam in');
     if (!isCode(eventUrl)) return fail(res, 404, 'Deze loting bestaat niet. Vraag de organisator om de juiste link.');
 
-    const assignment = await store.getAssignment(eventUrl, name);
-    if (!assignment) {
-        const status = await store.getLotteryStatus(eventUrl);
-        return fail(res, 404, status.exists
-            ? 'Deze naam staat niet in de lijst. Controleer de spelling.'
-            : 'Deze loting bestaat niet (meer). Neem contact op met de organisator.');
-    }
+    // Slot per persoon, gezet vóór het eerste await: een tweede gelijktijdig verzoek kan het lootje
+    // niet meer meepakken. ponytail: werkt voor één serverinstantie (Apenkaas kent geen voorwaardelijke
+    // update); bij meerdere instanties een uniek claim-document per deelnemer aanmaken.
+    const key = `${eventUrl}:${name.toLowerCase()}`;
+    const alreadyDrawn = () => fail(res, 409, 'Dit lootje is al getrokken. Is het kwijt? Vraag de organisator om een herstellink.');
+    if (drawing.has(key)) return alreadyDrawn();
+    drawing.add(key);
 
-    // Eén keer trekken: daarna geeft de server het lootje niet meer prijs (herstel loopt via de herstelflow).
-    if (assignment.viewed) return fail(res, 409, 'Dit lootje is al getrokken. Is het kwijt? Vraag de organisator om een herstellink.');
+    try {
+        const assignment = await store.getAssignment(eventUrl, name);
+        if (!assignment) {
+            const status = await store.getLotteryStatus(eventUrl);
+            return fail(res, 404, status.exists
+                ? 'Deze naam staat niet in de lijst. Controleer de spelling.'
+                : 'Deze loting bestaat niet (meer). Neem contact op met de organisator.');
+        }
 
-    if (await store.markAsViewed(assignment)) {
+        // Eén keer trekken: daarna geeft de server het lootje niet meer prijs (herstel loopt via de herstelflow).
+        if (assignment.viewed) return alreadyDrawn();
+
+        await store.markAsViewed(assignment);
         const status = await store.getLotteryStatus(eventUrl);
         io.to(`event:${eventUrl}`).emit('participant-viewed', {
             name: assignment.giver, viewedBy: status.viewedBy, viewedCount: status.viewedCount
         });
-    }
 
-    res.json({ success: true, giver: assignment.giver, recipient: assignment.recipient, family: assignment.family });
+        res.json({ success: true, giver: assignment.giver, recipient: assignment.recipient, family: assignment.family });
+    } finally {
+        drawing.delete(key);
+    }
 }));
 
 app.get('/api/status', wrap(async (req, res) => {

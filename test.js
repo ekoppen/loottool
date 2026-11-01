@@ -122,6 +122,11 @@ test('hele flow: aanmaken, trekken, herstel en verwijderen', async t => {
     assert.deepEqual(status.viewedBy, ['Anna']);
     assert.equal((await post('/api/draw', { name: 'Niemand', eventUrl })).status, 404);
 
+    // gelijktijdig trekken: precies één verzoek krijgt het lootje
+    const racers = await Promise.all([1, 2, 3, 4].map(() => post('/api/draw', { name: 'Bram', eventUrl })));
+    assert.equal(racers.filter(r => r.success).length, 1);
+    assert.equal(racers.filter(r => r.status === 409 && r.recipient === undefined).length, 3);
+
     // een tweede keer trekken geeft het lootje niet nog eens prijs
     const again = await post('/api/draw', { name: 'Anna', eventUrl });
     assert.equal(again.status, 409);
