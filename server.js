@@ -26,16 +26,16 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 
 // Begrenst uitgaande mail zodat de server geen mailrelay wordt. Elke soort mail heeft een eigen budget,
 // zodat misbruik van de open "loting aanmaken" de herstelmail niet blokkeert.
-// Per uur: 30 per soort, 3 per adres en (alleen aanmaakmail) 5 per IP.
+// Per uur: 40 in totaal, 30 per soort, en over alle soorten heen 3 per adres en 5 per IP.
 // ponytail: in het geheugen, werkt voor één serverinstantie.
 const sentMail = [];
 function mailAllowed(kind, to, ip) {
     const cutoff = Date.now() - 60 * 60 * 1000;
     while (sentMail.length && sentMail[0].at < cutoff) sentMail.shift();
     const addr = to.toLowerCase();
-    const ofKind = sentMail.filter(m => m.kind === kind);
-    if (ofKind.length >= 30 || ofKind.filter(m => m.to === addr).length >= 3) return false;
-    if (ip && ofKind.filter(m => m.ip === ip).length >= 5) return false;
+    if (sentMail.length >= 40 || sentMail.filter(m => m.kind === kind).length >= 30) return false;
+    if (sentMail.filter(m => m.to === addr).length >= 3) return false;
+    if (ip && sentMail.filter(m => m.ip === ip).length >= 5) return false;
     sentMail.push({ kind, to: addr, ip, at: Date.now() });
     return true;
 }
@@ -71,12 +71,12 @@ function sendAdminCredentialsEmail(email, eventName, eventUrl, username, ip) {
         <p style="color: #8a7a68;">Bewaar deze mail: je hebt de gegevens nodig om je loting te beheren.</p>`), ip);
 }
 
-function sendRecoveryEmail(email, eventName, recipientName) {
+function sendRecoveryEmail(email, eventName, recipientName, ip) {
     return sendMail('recovery', email, 'Je Sinterklaas lootje', mailFrame(`
         <h2>Je lootje van "${esc(eventName)}"</h2>
         <p>Jij mag een surprise maken voor:</p>
         <p style="font-size: 26px; font-weight: bold; color: #b11e2d;">${esc(recipientName)}</p>
-        <p>Veel plezier met het uitzoeken van een cadeau!</p>`));
+        <p>Veel plezier met het uitzoeken van een cadeau!</p>`), ip);
 }
 
 // --- Middleware ---
@@ -280,7 +280,7 @@ app.post('/api/recovery/click', rateLimit(120), wrap(async (req, res) => {
     const counts = { clickCount: result.clickCount, totalParticipants: result.totalParticipants };
 
     if (result.shouldSendEmail) {
-        const sent = await sendRecoveryEmail(result.recoveryEmail, result.eventName, result.missingName);
+        const sent = await sendRecoveryEmail(result.recoveryEmail, result.eventName, result.missingName, req.ip);
         if (!sent) {
             await store.removeRecoveryClick(result.clickId); // opnieuw proberen blijft mogelijk
             return fail(res, 503, 'De e-mail kon niet worden verstuurd. Probeer het zo nog eens.');
