@@ -68,9 +68,9 @@ function userFrom(req) {
 
 const cookieFlags = () => `HttpOnly; SameSite=Lax; Path=/${cfg().base.startsWith('https') ? '; Secure' : ''}`;
 
-function setSession(res, user) {
-    const token = sign({ uid: user.id, email: user.email, exp: Math.floor(Date.now() / 1000) + SESSION_SECONDS });
-    res.setHeader('Set-Cookie', `${COOKIE}=${token}; Max-Age=${SESSION_SECONDS}; ${cookieFlags()}`);
+function setSession(res, user, seconds = SESSION_SECONDS) {
+    const token = sign({ uid: user.id, email: user.email, exp: Math.floor(Date.now() / 1000) + seconds });
+    res.setHeader('Set-Cookie', `${COOKIE}=${token}; Max-Age=${seconds}; ${cookieFlags()}`);
 }
 
 const clearSession = res => res.setHeader('Set-Cookie', `${COOKIE}=; Max-Age=0; ${cookieFlags()}`);

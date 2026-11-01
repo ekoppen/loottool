@@ -14,6 +14,7 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const baseUrl = () => process.env.BASE_URL || `http://localhost:${PORT}`;
+const UNVERIFIED_SESSION_SECONDS = 60 * 60;
 const MIN_PARTICIPANTS = 3;
 const MAX_PARTICIPANTS = 50; // past in één Apenkaas-transactie (max. 100 acties)
 
@@ -423,7 +424,9 @@ app.post('/api/me/claim', strict, wrap(async (req, res) => {
 
     const created = !auth.userFrom(req);
     if (created && password) {
-        auth.setSession(res, user); // je koos zelf een wachtwoord: meteen ingelogd
+        // Je koos zelf een wachtwoord: meteen ingelogd. Het adres is echter niet bevestigd (iemand kan het adres van een ander
+        // intypen), dus deze sessie is kort. Kiest de echte eigenaar later een eigen wachtwoord, dan is de toegang snel weg.
+        auth.setSession(res, user, UNVERIFIED_SESSION_SECONDS);
         sendAccountCreatedEmail(user.email).catch(() => {});
     } else if (created) {
         try { await auth.requestPasswordReset(user.email); mailRequested = true; } catch (err) { console.error('Resetmail aanvragen mislukt:', err.message); }

@@ -126,7 +126,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
             body: body ? JSON.stringify(body) : undefined
         });
         const set = res.headers.get('set-cookie');
-        return { status: res.status, cookie: set ? set.split(';')[0] : null, ...(await res.json()) };
+        return { status: res.status, cookie: set ? set.split(';')[0] : null, setCookie: set, ...(await res.json()) };
     };
     const login = async code => (await call('POST', '/api/auth/callback', { code, verifier: 'v'.repeat(50) })).cookie;
     const names = ['Anna', 'Bram', 'Cor', 'Dirk'];
@@ -195,6 +195,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     const saved = await claim({ claimToken: draw.claimToken, email: 'Anna@Example.nl', password: 'langgenoeg1' });
     assert.ok(saved.success && saved.loggedIn && saved.cookie);                       // eigen wachtwoord: meteen ingelogd
     assert.equal(saved.email, 'anna@example.nl');
+    assert.match(saved.setCookie, /Max-Age=3600\b/);                                   // adres niet bevestigd: korte sessie
     assert.equal(lastRegisterPassword, 'langgenoeg1');
     const annaCookie = saved.cookie;
     const mine = await call('GET', '/api/me/lots', null, annaCookie);
