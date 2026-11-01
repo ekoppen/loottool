@@ -27,11 +27,12 @@ mail.transporter = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// Begrenst uitgaande mail zodat de server geen mailrelay wordt. Elke soort mail heeft een eigen budget,
-// zodat misbruik van de open "loting aanmaken" de herstelmail niet blokkeert.
-// Per uur: 40 in totaal; aanmaakmail (open voor iedereen) krijgt daar maximaal 20 van, zodat de
+// Begrenst uitgaande mail zodat de server geen mailrelay wordt: 40 per uur in totaal.
+// Aanmaakmail en resetmail kan iedereen veroorzaken; samen krijgen ze maximaal 20 van de 40, zodat de
 // herstelmail altijd ruimte houdt. Per soort geldt verder 3 per adres en 5 per IP.
 // ponytail: in het geheugen, werkt voor één serverinstantie.
+const OPEN_KINDS = ['create', 'reset'];
+const OPEN_CAP = 20;
 const MAIL_KIND_CAP = { create: 20, recovery: 30, reset: 20 };
 const sentMail = [];
 function mailAllowed(kind, to, ip) {
@@ -40,6 +41,7 @@ function mailAllowed(kind, to, ip) {
     const addr = to.toLowerCase();
     const ofKind = sentMail.filter(m => m.kind === kind);
     if (sentMail.length >= 40 || ofKind.length >= (MAIL_KIND_CAP[kind] ?? 0)) return false; // onbekende soort: geweigerd
+    if (OPEN_KINDS.includes(kind) && sentMail.filter(m => OPEN_KINDS.includes(m.kind)).length >= OPEN_CAP) return false;
     if (ofKind.filter(m => m.to === addr).length >= 3) return false;
     if (ip && ofKind.filter(m => m.ip === ip).length >= 5) return false;
     sentMail.push({ kind, to: addr, ip, at: Date.now() });
@@ -467,4 +469,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { app, server, mail };
+module.exports = { app, server, mail, mailAllowed };

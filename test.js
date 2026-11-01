@@ -114,7 +114,7 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
         RATE_LIMIT_STRICT: '1000', APENKAAS_ACHTERGRONDEN_BUCKET_ID: 'bucket1', APENKAAS_APP_ID: 'app1', SESSION_SECRET: 'x'.repeat(40), BASE_URL: 'http://localhost:3000'
     });
     const store = require('./store');
-    const { server, mail } = require('./server');
+    const { server, mail, mailAllowed } = require('./server');
     await new Promise(r => server.listen(0, r));
     const base = `http://127.0.0.1:${server.address().port}`;
     t.after(() => { server.close(); fake.close(); server.closeAllConnections?.(); });
@@ -299,6 +299,18 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     assert.equal((await hook({ ...tokenOnly, data: { ...tokenOnly.data, token: undefined } })).status, 400);
     mail.transporter = { sendMail: async () => { throw new Error('smtp stuk'); } };
     assert.equal((await hook(reset)).status, 503);                                  // mail mislukt: Apenkaas probeert later opnieuw
+
+    // open mailsoorten (aanmaken, wachtwoord vergeten) kunnen de herstelmail niet uithongeren
+    mail.transporter = { sendMail: async () => {} };
+    let accepted = 0;
+    for (let i = 0; i < 30; i++) {
+        const r = await hook({ ...reset, data: { ...reset.data, email: `gebruiker${i}@example.nl` } });
+        if (r.success) accepted++;
+        else assert.equal(r.status, 503);
+    }
+    assert.ok(accepted <= 20, `open budget overschreden: ${accepted}`);
+    assert.equal(mailAllowed('create', 'nieuw@example.nl'), false);                 // aanmaakmail deelt hetzelfde budget
+    assert.equal(mailAllowed('recovery', 'herstel@example.nl'), true);              // herstelmail blijft mogelijk
 
     // uitloggen wist de cookie
     assert.match((await fetch(base + '/api/auth/logout', { method: 'POST' })).headers.get('set-cookie'), /Max-Age=0/);
