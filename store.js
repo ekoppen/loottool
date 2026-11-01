@@ -104,7 +104,8 @@ async function setBackground(lottery, jpeg) {
     const c = cfg();
     if (!c.achtergronden) throw Object.assign(new Error('Foto-opslag is niet ingesteld'), { status: 503 });
     const created = await api('POST', `/storage/buckets/${c.achtergronden}/files`, {
-        bestandsnaam: 'achtergrond.jpg', // bewust zonder loting-code: de metadata is publiek leesbaar mimeType: 'image/jpeg', grootte: jpeg.length, readPermissions: ['any']
+        // bestandsnaam bewust zonder loting-code: de metadata is publiek leesbaar
+        bestandsnaam: 'achtergrond.jpg', mimeType: 'image/jpeg', grootte: jpeg.length, readPermissions: ['any']
     });
     const form = new FormData();
     Object.entries(created.fields).forEach(([k, v]) => form.append(k, v));

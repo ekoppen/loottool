@@ -8,6 +8,7 @@ const { createAssignments } = require('./assign');
 // --- nep-Apenkaas ---
 const docs = {}; // collectionId -> Map(id -> doc)
 const files = new Set(); // ids van geüploade bestanden in de nep-opslag
+let lastFileRequest = null; // laatste aanvraag om een bestand aan te maken
 const UNIQUE = { kliks: ['recoveryUrl', 'naam'], deelnemers: ['eventUrl', 'naamLower'] };
 
 function fakeCreate(coll, data, id = crypto.randomUUID()) {
@@ -40,6 +41,7 @@ const fake = http.createServer((req, res) => {
             if (m && m[5]) return send(200, { ok: true });
             if (m && m[6]) { // bestand aanmaken: metadata + uploadgegevens
                 const file = { id: crypto.randomUUID() };
+                lastFileRequest = body;
                 files.add(file.id);
                 return send(200, { file, uploadUrl: `http://127.0.0.1:${fake.address().port}/upload`, fields: { key: 'k' } });
             }
@@ -176,6 +178,11 @@ test('hele flow: inloggen, aanmaken, trekken, koppelen, herstel en verwijderen',
     assert.ok(first.success);
     assert.match(first.backgroundUrl, /\/storage\/files\/[^/]+\/view$/);
     assert.equal(files.size, 1);
+    // publiek leesbaar, als JPEG, en zonder loting-code in de metadata
+    assert.deepEqual(lastFileRequest.readPermissions, ['any']);
+    assert.equal(lastFileRequest.mimeType, 'image/jpeg');
+    assert.equal(lastFileRequest.grootte, jpeg.length);
+    assert.ok(!JSON.stringify(lastFileRequest).includes(eventUrl));
     const second = await upload(alice, jpeg);
     assert.notEqual(second.backgroundUrl, first.backgroundUrl);
     assert.equal(files.size, 1);
