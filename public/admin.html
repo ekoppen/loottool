@@ -7,7 +7,7 @@
     <title>Beheer - Sinterklaas Lootjes</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Fraunces:ital,wght@0,700;0,800;1,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900;1,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -126,6 +126,7 @@
                 <div>
                     <b id="progressText"></b>
                     <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="meter"><i></i></div>
+                    <div id="gifts" class="gifts" aria-hidden="true"></div>
                 </div>
 
                 <div class="field"><label for="shareUrl">Stuur deze link naar de deelnemers</label>
@@ -316,7 +317,12 @@
 
         function renderPeople() {
             $('familyList').innerHTML = familyNames().map(f => `<option value="${esc(f)}">`).join('');
-            $('peopleList').innerHTML = people.map((name, i) => `
+            $('peopleList').className = familyMode ? 'families' : 'people';
+            if (familyMode) {
+                $('peopleList').innerHTML = familyNames().map(fam => `
+                <li class="family"><h4>${esc(fam)}</h4><ul>${people.map((name, i) => families[name] !== fam ? '' : `
+                    <li class="person"><button type="button" data-edit="${i}" title="Gezin wijzigen">${esc(name)}</button><button type="button" data-remove="${i}" aria-label="Verwijder ${esc(name)}">×</button></li>`).join('')}</ul></li>`).join('');
+            } else $('peopleList').innerHTML = people.map((name, i) => `
                 <li><span class="who">${esc(name)}${familyMode ? `<button class="chip chip-btn" type="button" data-edit="${i}" title="Gezin wijzigen">${esc(families[name])}</button>` : ''}</span>
                 <span class="row-actions"><button class="btn btn-small btn-ghost" type="button" data-remove="${i}" aria-label="Verwijder ${esc(name)}">Verwijder</button></span></li>`).join('');
 
@@ -454,6 +460,10 @@
             $('meter').setAttribute('aria-valuenow', pct);
             $('shareUrl').value = `${location.origin}/event/${data.eventUrl}`;
             const viewed = new Set(data.viewedBy);
+            const hues = [0, 300, 200, 110, 250, 160, 40, 330];
+            $('gifts').innerHTML = data.participants.map((p, i) => i < done
+                ? `<img src="/kado.png" alt="" style="filter: hue-rotate(${hues[i % hues.length]}deg) saturate(1.3)">`
+                : '<img src="/kado.png" alt="" class="wait">').join('');
             $('dashPeople').innerHTML = data.participants.map(p => `
                 <li><span class="who">${esc(p)}${data.familyMode && data.families[p] ? `<span class="chip">${esc(data.families[p])}</span>` : ''}</span>
                 ${viewed.has(p) ? '<span class="done">getrokken</span>' : '<span class="chip">wacht nog</span>'}</li>`).join('');
